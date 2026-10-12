@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
-	"github.com/TonnPcst/martgo/internal/apperr"
+	"github.com/TonnPcst/martgo-backend/internal/apperr"
 )
 
 const maxBodyBytes = 1 << 20

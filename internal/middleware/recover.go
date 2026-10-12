@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 
 	chimw "github.com/go-chi/chi/v5/middleware"
-	"github.com/TonnPcst/martgo/internal/httpx"
+	"github.com/TonnPcst/martgo-backend/internal/httpx"
 )
 
 func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {

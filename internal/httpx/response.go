@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	chimw "github.com/go-chi/chi/v5/middleware"
-	"github.com/TonnPcst/martgo/internal/apperr"
+	"github.com/TonnPcst/martgo-backend/internal/apperr"
 )
 
 func JSON(w http.ResponseWriter, status int, v any) {

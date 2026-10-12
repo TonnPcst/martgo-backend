@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/TonnPcst/martgo/internal/apperr"
-	"github.com/TonnPcst/martgo/internal/db"
-	"github.com/TonnPcst/martgo/internal/domain"
-	"github.com/TonnPcst/martgo/internal/store"
+	"github.com/TonnPcst/martgo-backend/internal/apperr"
+	"github.com/TonnPcst/martgo-backend/internal/db"
+	"github.com/TonnPcst/martgo-backend/internal/domain"
+	"github.com/TonnPcst/martgo-backend/internal/store"
 )
 
 type ProductService struct{ store store.Store }

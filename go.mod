@@ -1,4 +1,4 @@
-module github.com/TonnPcst/martgo
+module github.com/TonnPcst/martgo-backend
 
 go 1.27.1
 

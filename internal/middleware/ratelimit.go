@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TonnPcst/martgo/internal/httpx"
+	"github.com/TonnPcst/martgo-backend/internal/httpx"
 )
 
 type window struct {

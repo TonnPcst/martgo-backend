@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 
-	"github.com/TonnPcst/martgo/internal/httpx"
-	"github.com/TonnPcst/martgo/internal/service"
+	"github.com/TonnPcst/martgo-backend/internal/httpx"
+	"github.com/TonnPcst/martgo-backend/internal/service"
 )
 
 type SaleHandler struct{ svc *service.SalesService }

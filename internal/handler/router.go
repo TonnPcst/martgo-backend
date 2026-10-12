@@ -8,11 +8,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
-	"github.com/TonnPcst/martgo/internal/auth"
-	"github.com/TonnPcst/martgo/internal/domain"
-	"github.com/TonnPcst/martgo/internal/httpx"
-	mw "github.com/TonnPcst/martgo/internal/middleware"
-	"github.com/TonnPcst/martgo/internal/service"
+	"github.com/TonnPcst/martgo-backend/internal/auth"
+	"github.com/TonnPcst/martgo-backend/internal/domain"
+	"github.com/TonnPcst/martgo-backend/internal/httpx"
+	mw "github.com/TonnPcst/martgo-backend/internal/middleware"
+	"github.com/TonnPcst/martgo-backend/internal/service"
 )
 
 type Services struct {

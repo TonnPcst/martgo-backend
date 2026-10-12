@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/TonnPcst/martgo/internal/auth"
-	"github.com/TonnPcst/martgo/internal/db"
-	"github.com/TonnPcst/martgo/internal/domain"
+	"github.com/TonnPcst/martgo-backend/internal/auth"
+	"github.com/TonnPcst/martgo-backend/internal/db"
+	"github.com/TonnPcst/martgo-backend/internal/domain"
 )
 
 const testSecret = "b2e55d7260e460942c63e92d8096bf06ff316a0ff2d1bee656b525a6514f7eb8"

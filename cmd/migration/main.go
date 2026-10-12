@@ -12,7 +12,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
-	"github.com/TonnPcst/martgo/migrations"
+	"github.com/TonnPcst/martgo-backend/migrations"
 )
 
 func main() {

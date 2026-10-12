@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/TonnPcst/martgo/internal/db"
-	"github.com/TonnPcst/martgo/internal/httpx"
-	"github.com/TonnPcst/martgo/internal/service"
+	"github.com/TonnPcst/martgo-backend/internal/db"
+	"github.com/TonnPcst/martgo-backend/internal/httpx"
+	"github.com/TonnPcst/martgo-backend/internal/service"
 )
 
 type UserHandler struct{ svc *service.UserService }

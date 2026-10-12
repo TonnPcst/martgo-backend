@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"github.com/TonnPcst/martgo/api"
+	"github.com/TonnPcst/martgo-backend/api"
 )
 
 const swaggerUIPage = `<!doctype html>

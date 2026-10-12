@@ -11,11 +11,11 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/TonnPcst/martgo/internal/auth"
-	"github.com/TonnPcst/martgo/internal/config"
-	"github.com/TonnPcst/martgo/internal/handler"
-	"github.com/TonnPcst/martgo/internal/service"
-	"github.com/TonnPcst/martgo/internal/store"
+	"github.com/TonnPcst/martgo-backend/internal/auth"
+	"github.com/TonnPcst/martgo-backend/internal/config"
+	"github.com/TonnPcst/martgo-backend/internal/handler"
+	"github.com/TonnPcst/martgo-backend/internal/service"
+	"github.com/TonnPcst/martgo-backend/internal/store"
 )
 
 func main() {

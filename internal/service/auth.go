@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TonnPcst/martgo/internal/apperr"
-	"github.com/TonnPcst/martgo/internal/auth"
-	"github.com/TonnPcst/martgo/internal/db"
-	"github.com/TonnPcst/martgo/internal/store"
+	"github.com/TonnPcst/martgo-backend/internal/apperr"
+	"github.com/TonnPcst/martgo-backend/internal/auth"
+	"github.com/TonnPcst/martgo-backend/internal/db"
+	"github.com/TonnPcst/martgo-backend/internal/store"
 )
 
 type AuthService struct {

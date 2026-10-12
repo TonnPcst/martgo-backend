@@ -3,7 +3,7 @@ package httpx
 import (
 	"net/http"
 
-	"github.com/TonnPcst/martgo/internal/apperr"
+	"github.com/TonnPcst/martgo-backend/internal/apperr"
 )
 
 const (

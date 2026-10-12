@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/TonnPcst/martgo/internal/db"
+	"github.com/TonnPcst/martgo-backend/internal/db"
 )
 
 type mockQuerier struct {
