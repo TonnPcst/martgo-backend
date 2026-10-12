@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/TonnPcst/martgo-backend/internal/auth"
 	"github.com/TonnPcst/martgo-backend/internal/config"
 	"github.com/TonnPcst/martgo-backend/internal/handler"
 	"github.com/TonnPcst/martgo-backend/internal/service"
 	"github.com/TonnPcst/martgo-backend/internal/store"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {

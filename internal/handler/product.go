@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/TonnPcst/martgo-backend/internal/httpx"
 	"github.com/TonnPcst/martgo-backend/internal/service"
+	"github.com/go-chi/chi/v5"
 )
 
 type ProductHandler struct{ svc *service.ProductService }

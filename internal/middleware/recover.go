@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/TonnPcst/martgo-backend/internal/httpx"
+	chimw "github.com/go-chi/chi/v5/middleware"
 )
 
 func Recoverer(logger *slog.Logger) func(http.Handler) http.Handler {

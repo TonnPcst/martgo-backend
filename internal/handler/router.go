@@ -6,13 +6,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/TonnPcst/martgo-backend/internal/auth"
 	"github.com/TonnPcst/martgo-backend/internal/domain"
 	"github.com/TonnPcst/martgo-backend/internal/httpx"
 	mw "github.com/TonnPcst/martgo-backend/internal/middleware"
 	"github.com/TonnPcst/martgo-backend/internal/service"
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
 )
 
 type Services struct {
