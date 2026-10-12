@@ -1,0 +1,72 @@
+package middleware
+
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	"github.com/TonnPcst/martgo/internal/auth"
+	"github.com/TonnPcst/martgo/internal/db"
+	"github.com/TonnPcst/martgo/internal/httpx"
+	"github.com/TonnPcst/martgo/internal/store"
+)
+
+type UserLookup interface {
+	GetUserByID(ctx context.Context, id int64) (db.User, error)
+}
+
+func Authenticate(tokens *auth.TokenManager, users UserLookup) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			schema, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+			if !ok || !strings.EqualFold(schema, "Bearer") || token == "" {
+				httpx.Error(w, http.StatusUnauthorized, "missing or malformed bearer token")
+				return
+			}
+
+			claims, err := tokens.Parse(token)
+			if err != nil {
+				httpx.Error(w, http.StatusUnauthorized, "invalid or expired token")
+				return
+			}
+
+			user, err := users.GetUserByID(r.Context(), claims.UserID)
+			if err != nil {
+				if store.IsNotFound(err) {
+					httpx.Error(w, http.StatusUnauthorized, "account is disabled")
+					return
+				}
+				httpx.HandleError(w, r, err)
+				return
+			}
+			if !user.IsActive {
+				httpx.Error(w, http.StatusUnauthorized, "account is disabled")
+				return
+			}
+			claims.Role = user.Role
+
+			next.ServeHTTP(w, r.WithContext(auth.WithClaims(r.Context(), claims)))
+		})
+	}
+}
+
+func RequireRole(roles ...string) func(http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(roles))
+	for _, role := range roles {
+		allowed[role] = true
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims, ok := auth.ClaimsFromContext(r.Context())
+			if !ok {
+				httpx.Error(w, http.StatusUnauthorized, "authentication required")
+				return
+			}
+			if !allowed[claims.Role] {
+				httpx.Error(w, http.StatusForbidden, "you do not have permission to access this resource")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}

@@ -1,0 +1,1029 @@
+openapi: 3.1.0
+info:
+  title: martgo API
+  version: 1.0.0
+  description: |
+    Supermarket management API: catalog, stock, purchases, sales and staff roles.
+
+    **Money** is always an integer in the smallest currency unit (`4500` = 45.00).
+
+    **Auth:** call `POST /auth/login`, then click **Authorize** and paste the
+    `access_token`. Roles: `admin`, `manager`, `cashier`.
+
+    **Errors** always have the shape `{"error": "message"}`.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+    description: Log in and inspect the current user.
+  - name: Users
+    description: Admin only.
+  - name: Categories
+    description: Read for all roles; write for admin and manager.
+  - name: Suppliers
+    description: Admin and manager.
+  - name: Products
+    description: Read for all roles; write and stock changes for admin and manager.
+  - name: Sales
+    description: All roles. Cashiers only see their own sales.
+  - name: Purchases
+    description: Admin and manager.
+
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Log in and get an access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+            example: { email: admin@martgo.local, password: admin12345 }
+      responses:
+        "200":
+          description: Logged in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      summary: Get the logged-in user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: List users
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Page of users
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Create a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUserRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Users]
+      operationId: getUser
+      summary: Get a user
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Users]
+      operationId: updateUser
+      summary: Update a user (only the fields sent are changed)
+      description: Admins cannot deactivate themselves or change their own role.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateUserRequest" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /categories:
+    get:
+      tags: [Categories]
+      operationId: listCategories
+      summary: List categories
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Page of categories
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CategoryPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Categories]
+      operationId: createCategory
+      summary: Create a category (admin, manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /categories/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Categories]
+      operationId: getCategory
+      summary: Get a category
+      responses:
+        "200":
+          description: Category
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Categories]
+      operationId: updateCategory
+      summary: Replace a category (admin, manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CategoryInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Category" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [Categories]
+      operationId: deleteCategory
+      summary: Delete a category (admin, manager)
+      description: Products in the category are kept and lose their category.
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /suppliers:
+    get:
+      tags: [Suppliers]
+      operationId: listSuppliers
+      summary: List suppliers
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Page of suppliers
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SupplierPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Suppliers]
+      operationId: createSupplier
+      summary: Create a supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SupplierInput" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Supplier" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /suppliers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Suppliers]
+      operationId: getSupplier
+      summary: Get a supplier
+      responses:
+        "200":
+          description: Supplier
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Supplier" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Suppliers]
+      operationId: updateSupplier
+      summary: Replace a supplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SupplierInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Supplier" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Suppliers]
+      operationId: deleteSupplier
+      summary: Delete a supplier
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The supplier has purchases and cannot be deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /products:
+    get:
+      tags: [Products]
+      operationId: listProducts
+      summary: List products
+      parameters:
+        - name: search
+          in: query
+          description: Partial, case-insensitive match on name or SKU, or an exact barcode
+          schema: { type: string }
+        - name: category_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - name: is_active
+          in: query
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Page of products
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Products]
+      operationId: createProduct
+      summary: Create a product (admin, manager)
+      description: Stock starts at 0. Add stock with a purchase or a stock adjustment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductInput" }
+            example:
+              sku: MILK-1L
+              barcode: "8850001000011"
+              name: Fresh Milk 1L
+              category_id: 1
+              unit: bottle
+              price: 4500
+              reorder_level: 5
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /products/low-stock:
+    get:
+      tags: [Products]
+      operationId: listLowStockProducts
+      summary: List active products at or below their reorder level
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Page of products
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /products/barcode/{barcode}:
+    get:
+      tags: [Products]
+      operationId: getProductByBarcode
+      summary: Look up a product by barcode
+      parameters:
+        - name: barcode
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Products]
+      operationId: getProduct
+      summary: Get a product
+      responses:
+        "200":
+          description: Product
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Products]
+      operationId: updateProduct
+      summary: Replace a product (admin, manager)
+      description: Replaces every editable field. `is_active` defaults to true when omitted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductInput" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [Products]
+      operationId: deactivateProduct
+      summary: Deactivate a product (admin, manager)
+      description: Soft delete. Sales history keeps pointing to the product.
+      responses:
+        "204": { description: Deactivated }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /products/{id}/stock-adjustments:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Products]
+      operationId: adjustProductStock
+      summary: Adjust stock manually (admin, manager)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StockAdjustmentRequest" }
+            example: { quantity_change: -1, note: damaged bottle }
+      responses:
+        "200":
+          description: Product after the adjustment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: The adjustment would make stock negative
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /products/{id}/stock-movements:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Products]
+      operationId: listStockMovements
+      summary: Stock history for a product, newest first (admin, manager)
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Page of stock movements
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockMovementPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /sales:
+    get:
+      tags: [Sales]
+      operationId: listSales
+      summary: List sales, newest first
+      description: Cashiers always see only their own sales; `cashier_id` is ignored for them.
+      parameters:
+        - name: cashier_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Page of sales
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalePage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Sales]
+      operationId: createSale
+      summary: Create a sale
+      description: |
+        The cashier is the logged-in user. Prices come from the database.
+        Duplicate product lines are merged.
+
+        - **cash:** `paid_amount` must be at least the total; the rest is returned as change.
+        - **card / ewallet:** charged exactly the total. Send `0` (or omit) to mean the total.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSaleRequest" }
+            example:
+              payment_method: cash
+              paid_amount: 10000
+              items:
+                - { product_id: 1, quantity: 2 }
+      responses:
+        "201":
+          description: Sale with items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaleDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Not enough stock
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: "insufficient stock for \"Fresh Milk 1L\": requested 999, available 21" }
+
+  /sales/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Sales]
+      operationId: getSale
+      summary: Get a sale with its items
+      description: Cashiers can only view their own sales.
+      responses:
+        "200":
+          description: Sale with items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaleDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /purchases:
+    get:
+      tags: [Purchases]
+      operationId: listPurchases
+      summary: List purchases, newest first
+      parameters:
+        - name: supplier_id
+          in: query
+          schema: { type: integer, format: int64 }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: Page of purchases
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchasePage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Purchases]
+      operationId: createPurchase
+      summary: Receive goods from a supplier
+      description: Adds stock and sets each product's cost to the new unit cost.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePurchaseRequest" }
+            example:
+              supplier_id: 1
+              invoice_no: INV-1001
+              items:
+                - { product_id: 1, quantity: 24, unit_cost: 3200 }
+      responses:
+        "201":
+          description: Purchase with items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseDetail" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /purchases/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Purchases]
+      operationId: getPurchase
+      summary: Get a purchase with its items
+      responses:
+        "200":
+          description: Purchase with items
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+
+  responses:
+    BadRequest:
+      description: Invalid input
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: "payment_method must be one of: cash, card, ewallet" }
+    Unauthorized:
+      description: Missing, invalid or expired token, or wrong login
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: invalid or expired token }
+    Forbidden:
+      description: The user's role is not allowed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: you do not have permission to access this resource }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: product not found }
+    Conflict:
+      description: Duplicate value or conflicting state
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: a product with this SKU or barcode already exists }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    Money:
+      type: integer
+      format: int64
+      description: Amount in the smallest currency unit (4500 = 45.00)
+
+    Pagination:
+      type: object
+      required: [limit, offset, total]
+      properties:
+        limit: { type: integer }
+        offset: { type: integer }
+        total: { type: integer, format: int64 }
+
+    Role:
+      type: string
+      enum: [admin, manager, cashier]
+
+    PaymentMethod:
+      type: string
+      enum: [cash, card, ewallet]
+
+    # --- Auth & users ---
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, maxLength: 72 }
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_at: { type: string, format: date-time }
+        user: { $ref: "#/components/schemas/User" }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string, format: email }
+        full_name: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    UserPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/User" }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+
+    CreateUserRequest:
+      type: object
+      required: [email, password, full_name, role]
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password: { type: string, minLength: 8, maxLength: 72 }
+        full_name: { type: string, maxLength: 100 }
+        role: { $ref: "#/components/schemas/Role" }
+
+    UpdateUserRequest:
+      type: object
+      description: Every field is optional; only the fields sent are changed.
+      properties:
+        full_name: { type: string, minLength: 1, maxLength: 100 }
+        role: { $ref: "#/components/schemas/Role" }
+        is_active: { type: boolean }
+        password: { type: string, minLength: 8, maxLength: 72 }
+
+    # --- Catalog ---
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CategoryPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Category" }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+
+    Supplier:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        contact_name: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        address: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    SupplierPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Supplier" }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+
+    SupplierInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, maxLength: 200 }
+        contact_name: { type: string, maxLength: 100 }
+        email: { type: string, format: email, maxLength: 254 }
+        phone: { type: string, maxLength: 50 }
+        address: { type: string, maxLength: 500 }
+
+    Product:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        sku: { type: string }
+        barcode: { type: [string, "null"] }
+        name: { type: string }
+        description: { type: string }
+        category_id: { type: [integer, "null"], format: int64 }
+        unit: { type: string, example: pcs }
+        price: { $ref: "#/components/schemas/Money" }
+        cost:
+          $ref: "#/components/schemas/Money"
+          description: Latest purchase cost
+        stock_quantity: { type: integer }
+        reorder_level: { type: integer }
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ProductPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Product" }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+
+    ProductInput:
+      type: object
+      required: [sku, name, price]
+      properties:
+        sku: { type: string, maxLength: 64 }
+        barcode: { type: [string, "null"], maxLength: 64 }
+        name: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 2000 }
+        category_id: { type: [integer, "null"], format: int64, minimum: 1 }
+        unit: { type: string, maxLength: 20, default: pcs }
+        price: { type: integer, format: int64, minimum: 1 }
+        cost: { type: integer, format: int64, minimum: 0 }
+        reorder_level: { type: integer, minimum: 0 }
+        is_active:
+          type: boolean
+          description: Used by PUT only; defaults to true
+
+    StockAdjustmentRequest:
+      type: object
+      required: [quantity_change, note]
+      properties:
+        quantity_change:
+          type: integer
+          description: Positive adds stock, negative removes it. Must not be 0.
+        note: { type: string, maxLength: 500 }
+
+    StockMovement:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        quantity_change: { type: integer }
+        reason: { type: string, enum: [sale, purchase, adjustment] }
+        reference_id:
+          type: [integer, "null"]
+          format: int64
+          description: Sale or purchase id; null for adjustments
+        note: { type: string }
+        created_by: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+
+    StockMovementPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/StockMovement" }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+
+    # --- Sales ---
+
+    Sale:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        cashier_id: { type: integer, format: int64 }
+        payment_method: { $ref: "#/components/schemas/PaymentMethod" }
+        subtotal: { $ref: "#/components/schemas/Money" }
+        discount: { $ref: "#/components/schemas/Money" }
+        total: { $ref: "#/components/schemas/Money" }
+        paid_amount: { $ref: "#/components/schemas/Money" }
+        change_amount: { $ref: "#/components/schemas/Money" }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
+
+    SaleItem:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        sale_id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        product_name:
+          type: string
+          description: Snapshot of the product name at the time of sale
+        quantity: { type: integer }
+        unit_price: { $ref: "#/components/schemas/Money" }
+        line_total: { $ref: "#/components/schemas/Money" }
+
+    SaleDetail:
+      allOf:
+        - $ref: "#/components/schemas/Sale"
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/SaleItem" }
+
+    SalePage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Sale" }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+
+    CreateSaleRequest:
+      type: object
+      required: [payment_method, items]
+      properties:
+        payment_method: { $ref: "#/components/schemas/PaymentMethod" }
+        discount: { type: integer, format: int64, minimum: 0, default: 0 }
+        paid_amount: { type: integer, format: int64, minimum: 0, default: 0 }
+        note: { type: string, maxLength: 500 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            required: [product_id, quantity]
+            properties:
+              product_id: { type: integer, format: int64, minimum: 1 }
+              quantity: { type: integer, minimum: 1, maximum: 10000 }
+
+    # --- Purchases ---
+
+    Purchase:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        supplier_id: { type: integer, format: int64 }
+        created_by: { type: integer, format: int64 }
+        invoice_no: { type: string }
+        total: { $ref: "#/components/schemas/Money" }
+        note: { type: string }
+        created_at: { type: string, format: date-time }
+
+    PurchaseItem:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        purchase_id: { type: integer, format: int64 }
+        product_id: { type: integer, format: int64 }
+        quantity: { type: integer }
+        unit_cost: { $ref: "#/components/schemas/Money" }
+        line_total: { $ref: "#/components/schemas/Money" }
+
+    PurchaseDetail:
+      allOf:
+        - $ref: "#/components/schemas/Purchase"
+        - type: object
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/PurchaseItem" }
+
+    PurchasePage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: "#/components/schemas/Purchase" }
+        pagination: { $ref: "#/components/schemas/Pagination" }
+
+    CreatePurchaseRequest:
+      type: object
+      required: [supplier_id, items]
+      properties:
+        supplier_id: { type: integer, format: int64, minimum: 1 }
+        invoice_no: { type: string, maxLength: 100 }
+        note: { type: string, maxLength: 500 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: Each product may appear only once.
+          items:
+            type: object
+            required: [product_id, quantity, unit_cost]
+            properties:
+              product_id: { type: integer, format: int64, minimum: 1 }
+              quantity: { type: integer, minimum: 1, maximum: 1000000 }
+              unit_cost: { type: integer, format: int64, minimum: 0 }
