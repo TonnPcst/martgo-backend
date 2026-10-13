@@ -62,8 +62,9 @@ func run() error {
 	}
 
 	router := handler.NewRouter(logger, tokens, st, pool, services, handler.RouterOptions{
-		TrustProxy: cfg.TrustProxy,
-		EnableDocs: cfg.EnableDocs,
+		TrustProxy:         cfg.TrustProxy,
+		EnableDocs:         cfg.EnableDocs,
+		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 	})
 
 	srv := &http.Server{

@@ -26,8 +26,9 @@ type Services struct {
 }
 
 type RouterOptions struct {
-	TrustProxy bool
-	EnableDocs bool
+	TrustProxy         bool
+	EnableDocs         bool
+	CORSAllowedOrigins []string
 }
 
 type Pinger interface {
@@ -51,7 +52,10 @@ func NewRouter(logger *slog.Logger, tokens *auth.TokenManager, users mw.UserLook
 	if opts.TrustProxy {
 		r.Use(chimw.RealIP)
 	}
-	r.Use(mw.RequestLogger(logger), mw.Recoverer(logger))
+	r.Use(mw.RequestLogger(logger), mw.Recoverer(logger), mw.SecureHeaders)
+	if len(opts.CORSAllowedOrigins) > 0 {
+		r.Use(mw.CORS(opts.CORSAllowedOrigins))
+	}
 
 	r.NotFound(func(w http.ResponseWriter, _ *http.Request) {
 		httpx.Error(w, http.StatusNotFound, "route not found")
@@ -67,12 +71,14 @@ func NewRouter(logger *slog.Logger, tokens *auth.TokenManager, users mw.UserLook
 	}
 
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(mw.APIHeaders)
 		r.With(mw.RateLimit(5, time.Minute)).Post("/auth/login", authH.Login)
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Authenticate(tokens, users))
 
 			r.Get("/auth/me", authH.Me)
+			r.Post("/auth/logout", authH.Logout)
 
 			r.Route("/users", func(r chi.Router) {
 				r.Use(adminOnly)

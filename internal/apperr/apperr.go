@@ -14,6 +14,7 @@ const (
 	KindConflict
 	KindUnauthorized
 	KindForbidden
+	KindTooManyRequests
 )
 
 type Error struct {
@@ -32,6 +33,9 @@ func NotFound(format string, args ...any) error     { return newf(KindNotFound, 
 func Conflict(format string, args ...any) error     { return newf(KindConflict, format, args...) }
 func Unauthorized(format string, args ...any) error { return newf(KindUnauthorized, format, args...) }
 func Forbidden(format string, args ...any) error    { return newf(KindForbidden, format, args...) }
+func TooManyRequests(format string, args ...any) error {
+	return newf(KindTooManyRequests, format, args...)
+}
 
 func KindOf(err error) Kind {
 	var e *Error

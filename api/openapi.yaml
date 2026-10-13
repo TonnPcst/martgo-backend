@@ -67,6 +67,17 @@ paths:
               schema: { $ref: "#/components/schemas/User" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logout
+      summary: Log out on all devices
+      description: Revokes every access token the current user holds.
+      responses:
+        "204":
+          description: Logged out
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /users:
     get:
       tags: [Users]

@@ -57,21 +57,27 @@ func (q *Queries) CountLowStockProducts(ctx context.Context) (int64, error) {
 const countProducts = `-- name: CountProducts :one
 SELECT count(*) FROM products
 WHERE ($1::text IS NULL
-       OR name ILIKE '%' || $1::text || '%'
-       OR sku ILIKE '%' || $1::text || '%'
+       OR name ILIKE $2::text
+       OR sku ILIKE $2::text
        OR barcode = $1::text)
-  AND ($2::bigint IS NULL OR category_id = $2::bigint)
-  AND ($3::boolean IS NULL OR is_active = $3::boolean)
+  AND ($3::bigint IS NULL OR category_id = $3::bigint)
+  AND ($4::boolean IS NULL OR is_active = $4::boolean)
 `
 
 type CountProductsParams struct {
 	Search     *string `json:"search"`
+	Pattern    *string `json:"pattern"`
 	CategoryID *int64  `json:"category_id"`
 	IsActive   *bool   `json:"is_active"`
 }
 
 func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countProducts, arg.Search, arg.CategoryID, arg.IsActive)
+	row := q.db.QueryRow(ctx, countProducts,
+		arg.Search,
+		arg.Pattern,
+		arg.CategoryID,
+		arg.IsActive,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -310,17 +316,18 @@ func (q *Queries) ListLowStockProducts(ctx context.Context, arg ListLowStockProd
 const listProducts = `-- name: ListProducts :many
 SELECT id, sku, barcode, name, description, category_id, unit, price, cost, stock_quantity, reorder_level, is_active, created_at, updated_at FROM products
 WHERE ($1::text IS NULL
-       OR name ILIKE '%' || $1::text || '%'
-       OR sku ILIKE '%' || $1::text || '%'
+       OR name ILIKE $2::text
+       OR sku ILIKE $2::text
        OR barcode = $1::text)
-  AND ($2::bigint IS NULL OR category_id = $2::bigint)
-  AND ($3::boolean IS NULL OR is_active = $3::boolean)
+  AND ($3::bigint IS NULL OR category_id = $3::bigint)
+  AND ($4::boolean IS NULL OR is_active = $4::boolean)
 ORDER BY name, id
-LIMIT $5::int OFFSET $4::int
+LIMIT $6::int OFFSET $5::int
 `
 
 type ListProductsParams struct {
 	Search     *string `json:"search"`
+	Pattern    *string `json:"pattern"`
 	CategoryID *int64  `json:"category_id"`
 	IsActive   *bool   `json:"is_active"`
 	Offset     int32   `json:"offset"`
@@ -330,6 +337,7 @@ type ListProductsParams struct {
 func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
 	rows, err := q.db.Query(ctx, listProducts,
 		arg.Search,
+		arg.Pattern,
 		arg.CategoryID,
 		arg.IsActive,
 		arg.Offset,

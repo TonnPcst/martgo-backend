@@ -25,6 +25,9 @@ func upSeedAdmin(ctx context.Context, tx *sql.Tx) error {
 	if len(password) < 8 || len(password) > 72 {
 		return errors.New("seed admin: ADMIN_PASSWORD must be 8-72 characters")
 	}
+	if os.Getenv("APP_ENV") == "production" && password == "admin12345" {
+		return errors.New("seed admin: ADMIN_PASSWORD is still the example value")
+	}
 	if name == "" {
 		name = "Administrator"
 	}

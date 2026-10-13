@@ -113,9 +113,21 @@ func (s *ProductService) GetByBarcode(ctx context.Context, barcode string) (db.P
 	return p, dbError(err, "product")
 }
 
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+func likePattern(search *string) *string {
+	if search == nil {
+		return nil
+	}
+	p := "%" + likeEscaper.Replace(*search) + "%"
+	return &p
+}
+
 func (s *ProductService) List(ctx context.Context, f ProductFilter, limit, offset int32) ([]db.Product, int64, error) {
+	pattern := likePattern(f.Search)
 	items, err := s.store.ListProducts(ctx, db.ListProductsParams{
 		Search:     f.Search,
+		Pattern:    pattern,
 		CategoryID: f.CategoryID,
 		IsActive:   f.IsActive,
 		Limit:      limit,
@@ -126,6 +138,7 @@ func (s *ProductService) List(ctx context.Context, f ProductFilter, limit, offse
 	}
 	total, err := s.store.CountProducts(ctx, db.CountProductsParams{
 		Search:     f.Search,
+		Pattern:    pattern,
 		CategoryID: f.CategoryID,
 		IsActive:   f.IsActive,
 	})

@@ -53,7 +53,7 @@ func send(h http.Handler, method, path, token string) *httptest.ResponseRecorder
 
 func mustToken(t *testing.T, tokens *auth.TokenManager, userID int64, role string) string {
 	t.Helper()
-	token, _, err := tokens.Generate(userID, role)
+	token, _, err := tokens.Generate(userID, role, 0)
 	require.NoError(t, err)
 	return token
 }

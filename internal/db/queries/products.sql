@@ -12,8 +12,8 @@ SELECT * FROM products WHERE barcode = sqlc.arg('barcode')::text;
 -- name: ListProducts :many
 SELECT * FROM products
 WHERE (sqlc.narg('search')::text IS NULL
-       OR name ILIKE '%' || sqlc.narg('search')::text || '%'
-       OR sku ILIKE '%' || sqlc.narg('search')::text || '%'
+       OR name ILIKE sqlc.narg('pattern')::text
+       OR sku ILIKE sqlc.narg('pattern')::text
        OR barcode = sqlc.narg('search')::text)
   AND (sqlc.narg('category_id')::bigint IS NULL OR category_id = sqlc.narg('category_id')::bigint)
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean)
@@ -23,8 +23,8 @@ LIMIT sqlc.arg('limit')::int OFFSET sqlc.arg('offset')::int;
 -- name: CountProducts :one
 SELECT count(*) FROM products
 WHERE (sqlc.narg('search')::text IS NULL
-       OR name ILIKE '%' || sqlc.narg('search')::text || '%'
-       OR sku ILIKE '%' || sqlc.narg('search')::text || '%'
+       OR name ILIKE sqlc.narg('pattern')::text
+       OR sku ILIKE sqlc.narg('pattern')::text
        OR barcode = sqlc.narg('search')::text)
   AND (sqlc.narg('category_id')::bigint IS NULL OR category_id = sqlc.narg('category_id')::bigint)
   AND (sqlc.narg('is_active')::boolean IS NULL OR is_active = sqlc.narg('is_active')::boolean);

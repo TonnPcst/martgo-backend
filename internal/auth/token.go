@@ -11,8 +11,9 @@ import (
 const issuer = "martgo"
 
 type Claims struct {
-	UserID int64  `json:"uid"`
-	Role   string `json:"role"`
+	UserID       int64  `json:"uid"`
+	Role         string `json:"role"`
+	TokenVersion int32  `json:"ver"`
 	jwt.RegisteredClaims
 }
 
@@ -25,12 +26,13 @@ func NewTokenManager(secret string, ttl time.Duration) *TokenManager {
 	return &TokenManager{secret: []byte(secret), ttl: ttl}
 }
 
-func (m *TokenManager) Generate(userID int64, role string) (string, time.Time, error) {
+func (m *TokenManager) Generate(userID int64, role string, version int32) (string, time.Time, error) {
 	now := time.Now()
 	expiresAt := now.Add(m.ttl)
 	claims := Claims{
-		UserID: userID,
-		Role:   role,
+		UserID:       userID,
+		Role:         role,
+		TokenVersion: version,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   strconv.FormatInt(userID, 10),
 			Issuer:    issuer,

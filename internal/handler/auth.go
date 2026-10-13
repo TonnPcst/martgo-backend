@@ -52,3 +52,11 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.JSON(w, http.StatusOK, toUserResponse(user))
 }
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if err := h.auth.Logout(r.Context(), actorFrom(r).UserID); err != nil {
+		httpx.HandleError(w, r, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

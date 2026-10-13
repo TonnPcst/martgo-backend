@@ -53,6 +53,8 @@ func statusFor(kind apperr.Kind) int {
 		return http.StatusUnauthorized
 	case apperr.KindForbidden:
 		return http.StatusForbidden
+	case apperr.KindTooManyRequests:
+		return http.StatusTooManyRequests
 	}
 	return http.StatusInternalServerError
 }

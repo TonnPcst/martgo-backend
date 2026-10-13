@@ -10,6 +10,7 @@ import (
 
 type Querier interface {
 	AddProductStock(ctx context.Context, arg AddProductStockParams) (Product, error)
+	BumpTokenVersion(ctx context.Context, id int64) error
 	CountCategories(ctx context.Context) (int64, error)
 	CountLowStockProducts(ctx context.Context) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)

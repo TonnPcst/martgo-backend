@@ -43,6 +43,10 @@ func Authenticate(tokens *auth.TokenManager, users UserLookup) func(http.Handler
 				httpx.Error(w, http.StatusUnauthorized, "account is disabled")
 				return
 			}
+			if claims.TokenVersion != user.TokenVersion {
+				httpx.Error(w, http.StatusUnauthorized, "token has been revoked")
+				return
+			}
 			claims.Role = user.Role
 
 			next.ServeHTTP(w, r.WithContext(auth.WithClaims(r.Context(), claims)))

@@ -6,19 +6,21 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
-	Env             string
-	HTTPAddr        string
-	LogLevel        slog.Level
-	DatabaseURL     string
-	JWTSecret       string
-	JWTTTL          time.Duration
-	ShutdownTimeout time.Duration
-	TrustProxy      bool
-	EnableDocs      bool
+	Env                string
+	HTTPAddr           string
+	LogLevel           slog.Level
+	DatabaseURL        string
+	JWTSecret          string
+	JWTTTL             time.Duration
+	ShutdownTimeout    time.Duration
+	TrustProxy         bool
+	EnableDocs         bool
+	CORSAllowedOrigins []string
 }
 
 func Load() (Config, error) {
@@ -50,8 +52,18 @@ func Load() (Config, error) {
 	if cfg.TrustProxy, err = getBool("TRUST_PROXY", false); err != nil {
 		errs = append(errs, err)
 	}
-	if cfg.EnableDocs, err = getBool("ENABLE_DOCS", true); err != nil {
+	if cfg.EnableDocs, err = getBool("ENABLE_DOCS", cfg.Env != "production"); err != nil {
 		errs = append(errs, err)
+	}
+	cfg.CORSAllowedOrigins = splitList(os.Getenv("CORS_ALLOWED_ORIGINS"))
+
+	if cfg.Env == "production" {
+		if strings.Contains(cfg.DatabaseURL, "sslmode=disable") {
+			errs = append(errs, errors.New("DATABASE_URL must not use sslmode=disable in production"))
+		}
+		if strings.HasPrefix(cfg.JWTSecret, "change-me") {
+			errs = append(errs, errors.New("JWT_SECRET is still the example value"))
+		}
 	}
 
 	return cfg, errors.Join(errs...)
@@ -74,4 +86,14 @@ func getBool(key string, fallback bool) (bool, error) {
 		return false, fmt.Errorf("%s must be true or false", key)
 	}
 	return b, nil
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

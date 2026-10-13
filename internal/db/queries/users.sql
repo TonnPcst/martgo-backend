@@ -22,6 +22,13 @@ UPDATE users SET
     full_name     = COALESCE(sqlc.narg('full_name')::text, full_name),
     role          = COALESCE(sqlc.narg('role')::text, role),
     is_active     = COALESCE(sqlc.narg('is_active')::boolean, is_active),
-    password_hash = COALESCE(sqlc.narg('password_hash')::text, password_hash)
+    password_hash = COALESCE(sqlc.narg('password_hash')::text, password_hash),
+    token_version = token_version + CASE
+        WHEN sqlc.narg('password_hash')::text IS NOT NULL
+          OR sqlc.narg('is_active')::boolean IS FALSE THEN 1
+        ELSE 0 END
 WHERE id = sqlc.arg('id')
 RETURNING *;
+
+-- name: BumpTokenVersion :exec
+UPDATE users SET token_version = token_version + 1 WHERE id = $1;

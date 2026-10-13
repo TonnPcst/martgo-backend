@@ -9,6 +9,15 @@ import (
 	"context"
 )
 
+const bumpTokenVersion = `-- name: BumpTokenVersion :exec
+UPDATE users SET token_version = token_version + 1 WHERE id = $1
+`
+
+func (q *Queries) BumpTokenVersion(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, bumpTokenVersion, id)
+	return err
+}
+
 const countUsers = `-- name: CountUsers :one
 SELECT count(*) FROM users
 `
@@ -23,7 +32,7 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, full_name, role)
 VALUES ($1, $2, $3, $4)
-RETURNING id, email, password_hash, full_name, role, is_active, created_at, updated_at
+RETURNING id, email, password_hash, full_name, role, is_active, created_at, updated_at, token_version
 `
 
 type CreateUserParams struct {
@@ -50,12 +59,13 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, full_name, role, is_active, created_at, updated_at FROM users WHERE email = $1
+SELECT id, email, password_hash, full_name, role, is_active, created_at, updated_at, token_version FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error) {
@@ -70,12 +80,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (User, error
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, full_name, role, is_active, created_at, updated_at FROM users WHERE id = $1
+SELECT id, email, password_hash, full_name, role, is_active, created_at, updated_at, token_version FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
@@ -90,12 +101,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (User, error) {
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, password_hash, full_name, role, is_active, created_at, updated_at FROM users
+SELECT id, email, password_hash, full_name, role, is_active, created_at, updated_at, token_version FROM users
 ORDER BY id
 LIMIT $2::int OFFSET $1::int
 `
@@ -123,6 +135,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, e
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.TokenVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -139,9 +152,13 @@ UPDATE users SET
     full_name     = COALESCE($1::text, full_name),
     role          = COALESCE($2::text, role),
     is_active     = COALESCE($3::boolean, is_active),
-    password_hash = COALESCE($4::text, password_hash)
+    password_hash = COALESCE($4::text, password_hash),
+    token_version = token_version + CASE
+        WHEN $4::text IS NOT NULL
+          OR $3::boolean IS FALSE THEN 1
+        ELSE 0 END
 WHERE id = $5
-RETURNING id, email, password_hash, full_name, role, is_active, created_at, updated_at
+RETURNING id, email, password_hash, full_name, role, is_active, created_at, updated_at, token_version
 `
 
 type UpdateUserParams struct {
@@ -170,6 +187,7 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.TokenVersion,
 	)
 	return i, err
 }
