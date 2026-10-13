@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"io"
 	"log/slog"
@@ -10,35 +11,43 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/TonnPcst/martgo-backend/internal/auth"
-	"github.com/TonnPcst/martgo-backend/internal/db"
 	"github.com/TonnPcst/martgo-backend/internal/domain"
+	mw "github.com/TonnPcst/martgo-backend/internal/middleware"
+	"github.com/TonnPcst/martgo-backend/internal/session"
 )
-
-const testSecret = "b2e55d7260e460942c63e92d8096bf06ff316a0ff2d1bee656b525a6514f7eb8"
 
 type fakePinger struct{ err error }
 
 func (f fakePinger) Ping(context.Context) error { return f.err }
 
-type fakeUsers map[int64]db.User
+type fakeSessions map[int64]session.State
 
-func (f fakeUsers) GetUserByID(_ context.Context, id int64) (db.User, error) {
-	u, ok := f[id]
+func (f fakeSessions) Get(_ context.Context, id int64) (session.State, error) {
+	s, ok := f[id]
 	if !ok {
-		return db.User{}, pgx.ErrNoRows
+		return session.State{}, session.ErrNotFound
 	}
-	return u, nil
+	return s, nil
 }
 
-func newTestRouter(users fakeUsers, pinger Pinger) (http.Handler, *auth.TokenManager) {
-	tokens := auth.NewTokenManager(testSecret, time.Hour)
+type brokenSessions struct{}
+
+func (brokenSessions) Get(context.Context, int64) (session.State, error) {
+	return session.State{}, errors.New("redis down")
+}
+
+// newTestRouter returns the router and the private key that plays the auth service.
+func newTestRouter(t *testing.T, sessions mw.SessionLookup, pinger Pinger) (http.Handler, ed25519.PrivateKey) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewRouter(logger, tokens, users, pinger, Services{}, RouterOptions{}), tokens
+	return NewRouter(logger, auth.NewVerifierFromKey(pub), sessions, pinger, Services{}, RouterOptions{}), priv
 }
 
 func send(h http.Handler, method, path, token string) *httptest.ResponseRecorder {
@@ -51,33 +60,51 @@ func send(h http.Handler, method, path, token string) *httptest.ResponseRecorder
 	return rec
 }
 
-func mustToken(t *testing.T, tokens *auth.TokenManager, userID int64, role string) string {
+// mustToken signs a token the way the auth service does.
+func mustToken(t *testing.T, priv ed25519.PrivateKey, userID int64, role string, version int32) string {
 	t.Helper()
-	token, _, err := tokens.Generate(userID, role, 0)
+	claims := auth.Claims{
+		UserID:       userID,
+		Role:         role,
+		TokenVersion: version,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "martgo-auth",
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodEdDSA, claims).SignedString(priv)
 	require.NoError(t, err)
-	return token
+	return signed
 }
 
 func TestHealthz(t *testing.T) {
-	h, _ := newTestRouter(nil, fakePinger{})
+	h, _ := newTestRouter(t, fakeSessions{}, fakePinger{})
 	assert.Equal(t, http.StatusOK, send(h, http.MethodGet, "/healthz", "").Code)
 
-	h, _ = newTestRouter(nil, fakePinger{err: errors.New("db down")})
+	h, _ = newTestRouter(t, fakeSessions{}, fakePinger{err: errors.New("db down")})
 	assert.Equal(t, http.StatusServiceUnavailable, send(h, http.MethodGet, "/healthz", "").Code)
 }
 
 func TestNotFoundAndMethodNotAllowed(t *testing.T) {
-	h, _ := newTestRouter(nil, fakePinger{})
+	h, _ := newTestRouter(t, fakeSessions{}, fakePinger{})
 	assert.Equal(t, http.StatusNotFound, send(h, http.MethodGet, "/nope", "").Code)
 	assert.Equal(t, http.StatusMethodNotAllowed, send(h, http.MethodDelete, "/healthz", "").Code)
 }
 
+func TestAuthRoutesMovedOut(t *testing.T) {
+	h, _ := newTestRouter(t, fakeSessions{}, fakePinger{})
+	assert.Equal(t, http.StatusNotFound, send(h, http.MethodPost, "/api/v1/auth/login", "").Code)
+}
+
 func TestAuthenticate(t *testing.T) {
-	users := fakeUsers{
-		1: {ID: 1, Role: domain.RoleCashier, IsActive: true},
-		2: {ID: 2, Role: domain.RoleCashier, IsActive: false},
+	sessions := fakeSessions{
+		1: {TokenVersion: 1, Role: domain.RoleCashier, Active: true},
+		2: {TokenVersion: 1, Role: domain.RoleCashier, Active: false},
+		3: {TokenVersion: 2, Role: domain.RoleCashier, Active: true},
 	}
-	h, tokens := newTestRouter(users, fakePinger{})
+	h, priv := newTestRouter(t, sessions, fakePinger{})
+	_, otherKey, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name  string
@@ -86,35 +113,32 @@ func TestAuthenticate(t *testing.T) {
 	}{
 		{"missing token", "", http.StatusUnauthorized},
 		{"garbage token", "not-a-jwt", http.StatusUnauthorized},
-		{"disabled user", mustToken(t, tokens, 2, domain.RoleCashier), http.StatusUnauthorized},
-		{"deleted user", mustToken(t, tokens, 99, domain.RoleCashier), http.StatusUnauthorized},
-		// Passes authentication, then RequireRole rejects a cashier on /users.
-		{"active cashier", mustToken(t, tokens, 1, domain.RoleCashier), http.StatusForbidden},
+		{"signed by another key", mustToken(t, otherKey, 1, domain.RoleCashier, 1), http.StatusUnauthorized},
+		{"disabled user", mustToken(t, priv, 2, domain.RoleCashier, 1), http.StatusUnauthorized},
+		{"no session", mustToken(t, priv, 99, domain.RoleCashier, 1), http.StatusUnauthorized},
+		{"revoked token", mustToken(t, priv, 3, domain.RoleCashier, 1), http.StatusUnauthorized},
+		// Passes authentication, then RequireRole rejects a cashier on /suppliers.
+		{"active cashier", mustToken(t, priv, 1, domain.RoleCashier, 1), http.StatusForbidden},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, send(h, http.MethodGet, "/api/v1/users", tt.token).Code)
+			assert.Equal(t, tt.want, send(h, http.MethodGet, "/api/v1/suppliers", tt.token).Code)
 		})
 	}
 }
 
-func TestRoleComesFromDatabase(t *testing.T) {
-	// The token still says admin, but the user was demoted to cashier.
-	users := fakeUsers{1: {ID: 1, Role: domain.RoleCashier, IsActive: true}}
-	h, tokens := newTestRouter(users, fakePinger{})
+func TestRoleComesFromSession(t *testing.T) {
+	// The token still says admin, but the auth service has since demoted the user.
+	sessions := fakeSessions{1: {TokenVersion: 1, Role: domain.RoleCashier, Active: true}}
+	h, priv := newTestRouter(t, sessions, fakePinger{})
 
-	rec := send(h, http.MethodGet, "/api/v1/users", mustToken(t, tokens, 1, domain.RoleAdmin))
+	rec := send(h, http.MethodGet, "/api/v1/suppliers", mustToken(t, priv, 1, domain.RoleAdmin, 1))
 	assert.Equal(t, http.StatusForbidden, rec.Code)
 }
 
-func TestLoginRateLimit(t *testing.T) {
-	h, _ := newTestRouter(nil, fakePinger{})
+func TestSessionStoreDownFailsClosed(t *testing.T) {
+	h, priv := newTestRouter(t, brokenSessions{}, fakePinger{})
 
-	// An empty body fails validation (400) before reaching the auth service.
-	for range 5 {
-		assert.Equal(t, http.StatusBadRequest, send(h, http.MethodPost, "/api/v1/auth/login", "").Code)
-	}
-	rec := send(h, http.MethodPost, "/api/v1/auth/login", "")
-	assert.Equal(t, http.StatusTooManyRequests, rec.Code)
-	assert.NotEmpty(t, rec.Header().Get("Retry-After"))
+	rec := send(h, http.MethodGet, "/api/v1/suppliers", mustToken(t, priv, 1, domain.RoleAdmin, 1))
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }

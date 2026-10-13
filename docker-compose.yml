@@ -17,5 +17,31 @@ services:
       timeout: 5s
       retries: 10
 
+  # Shared with the auth service: it writes session state, mart-api reads it.
+  redis:
+    image: redis:7-alpine
+    container_name: martgo-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Single entry point: /api/v1/auth and /api/v1/users go to the auth service
+  # (:8081), everything else to mart-api (:8080). Both run on the host.
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: martgo-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT:-8000}:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   pgdata:

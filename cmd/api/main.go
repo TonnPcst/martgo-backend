@@ -14,8 +14,10 @@ import (
 	"github.com/TonnPcst/martgo-backend/internal/config"
 	"github.com/TonnPcst/martgo-backend/internal/handler"
 	"github.com/TonnPcst/martgo-backend/internal/service"
+	"github.com/TonnPcst/martgo-backend/internal/session"
 	"github.com/TonnPcst/martgo-backend/internal/store"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -49,11 +51,27 @@ func run() error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 
+	redisOpt, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		return fmt.Errorf("parse REDIS_URL: %w", err)
+	}
+	rdb := redis.NewClient(redisOpt)
+	defer rdb.Close()
+	if err := rdb.Ping(pingCtx).Err(); err != nil {
+		return fmt.Errorf("connect to redis: %w", err)
+	}
+
+	pubPEM, err := os.ReadFile(cfg.JWTPublicKeyFile)
+	if err != nil {
+		return fmt.Errorf("read public key: %w", err)
+	}
+	tokens, err := auth.NewVerifier(pubPEM)
+	if err != nil {
+		return err
+	}
+
 	st := store.New(pool)
-	tokens := auth.NewTokenManager(cfg.JWTSecret, cfg.JWTTTL)
 	services := handler.Services{
-		Auth:       service.NewAuthService(st, tokens),
-		Users:      service.NewUserService(st),
 		Categories: service.NewCategoryService(st),
 		Suppliers:  service.NewSupplierService(st),
 		Products:   service.NewProductService(st),
@@ -61,7 +79,7 @@ func run() error {
 		Purchases:  service.NewPurchaseService(st),
 	}
 
-	router := handler.NewRouter(logger, tokens, st, pool, services, handler.RouterOptions{
+	router := handler.NewRouter(logger, tokens, session.NewReader(rdb), pool, services, handler.RouterOptions{
 		TrustProxy:         cfg.TrustProxy,
 		EnableDocs:         cfg.EnableDocs,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,

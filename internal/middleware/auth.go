@@ -2,20 +2,21 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/TonnPcst/martgo-backend/internal/auth"
-	"github.com/TonnPcst/martgo-backend/internal/db"
 	"github.com/TonnPcst/martgo-backend/internal/httpx"
-	"github.com/TonnPcst/martgo-backend/internal/store"
+	"github.com/TonnPcst/martgo-backend/internal/session"
 )
 
-type UserLookup interface {
-	GetUserByID(ctx context.Context, id int64) (db.User, error)
+// SessionLookup returns the token state the auth service published for a user.
+type SessionLookup interface {
+	Get(ctx context.Context, userID int64) (session.State, error)
 }
 
-func Authenticate(tokens *auth.TokenManager, users UserLookup) func(http.Handler) http.Handler {
+func Authenticate(tokens *auth.Verifier, sessions SessionLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			schema, token, ok := strings.Cut(r.Header.Get("Authorization"), " ")
@@ -30,24 +31,25 @@ func Authenticate(tokens *auth.TokenManager, users UserLookup) func(http.Handler
 				return
 			}
 
-			user, err := users.GetUserByID(r.Context(), claims.UserID)
+			st, err := sessions.Get(r.Context(), claims.UserID)
 			if err != nil {
-				if store.IsNotFound(err) {
-					httpx.Error(w, http.StatusUnauthorized, "account is disabled")
+				if errors.Is(err, session.ErrNotFound) {
+					httpx.Error(w, http.StatusUnauthorized, "session expired, please log in again")
 					return
 				}
+				// Redis is down or the entry is corrupt: fail closed, never skip the check.
 				httpx.HandleError(w, r, err)
 				return
 			}
-			if !user.IsActive {
+			if !st.Active {
 				httpx.Error(w, http.StatusUnauthorized, "account is disabled")
 				return
 			}
-			if claims.TokenVersion != user.TokenVersion {
+			if claims.TokenVersion != st.TokenVersion {
 				httpx.Error(w, http.StatusUnauthorized, "token has been revoked")
 				return
 			}
-			claims.Role = user.Role
+			claims.Role = st.Role
 
 			next.ServeHTTP(w, r.WithContext(auth.WithClaims(r.Context(), claims)))
 		})

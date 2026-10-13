@@ -6,8 +6,9 @@ export
 SQLC_VERSION  := v1.31.1
 GOOSE_VERSION := v3.28.0
 AIR_VERSION   := v1.67.4
+NODEMON_VERSION := 3.1.11
 
-.PHONY: help up down run dev build migrate migrate-down migrate-status migrate-create sqlc test vet tidy lint-api
+.PHONY: help up down run dev nodemon build migrate migrate-down migrate-status migrate-create sqlc test vet tidy lint-api
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-16s %s\n", $$1, $$2}'
@@ -23,6 +24,9 @@ run: ## Run the API
 
 dev: ## Run the API with hot reload (Air)
 	go run github.com/air-verse/air@$(AIR_VERSION)
+
+nodemon: ## Run with auto-restart using nodemon (needs Node.js; config in nodemon.json)
+	npx --yes nodemon@$(NODEMON_VERSION)
 
 build: ## Build the API binary into ./bin
 	go build -o bin/martgo ./cmd/api

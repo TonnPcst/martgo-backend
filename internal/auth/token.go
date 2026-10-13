@@ -2,14 +2,17 @@ package auth
 
 import (
 	"context"
-	"strconv"
-	"time"
+	"crypto/ed25519"
+	"errors"
+	"fmt"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const issuer = "martgo"
+// issuer must match the auth service (martgo-auth: internal/token.Issuer).
+const issuer = "martgo-auth"
 
+// Claims mirrors the auth service's token contract: keep the JSON tags identical on both sides.
 type Claims struct {
 	UserID       int64  `json:"uid"`
 	Role         string `json:"role"`
@@ -17,41 +20,31 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-type TokenManager struct {
-	secret []byte
-	ttl    time.Duration
+// Verifier checks tokens issued by the auth service. It only holds the public
+// key, so this service cannot mint tokens.
+type Verifier struct {
+	pub ed25519.PublicKey
 }
 
-func NewTokenManager(secret string, ttl time.Duration) *TokenManager {
-	return &TokenManager{secret: []byte(secret), ttl: ttl}
-}
-
-func (m *TokenManager) Generate(userID int64, role string, version int32) (string, time.Time, error) {
-	now := time.Now()
-	expiresAt := now.Add(m.ttl)
-	claims := Claims{
-		UserID:       userID,
-		Role:         role,
-		TokenVersion: version,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   strconv.FormatInt(userID, 10),
-			Issuer:    issuer,
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(expiresAt),
-		},
-	}
-	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)
+func NewVerifier(pubPEM []byte) (*Verifier, error) {
+	key, err := jwt.ParseEdPublicKeyFromPEM(pubPEM)
 	if err != nil {
-		return "", time.Time{}, err
+		return nil, fmt.Errorf("parse public key: %w", err)
 	}
-	return signed, expiresAt, nil
+	pub, ok := key.(ed25519.PublicKey)
+	if !ok {
+		return nil, errors.New("public key is not ed25519")
+	}
+	return NewVerifierFromKey(pub), nil
 }
 
-func (m *TokenManager) Parse(token string) (*Claims, error) {
+func NewVerifierFromKey(pub ed25519.PublicKey) *Verifier { return &Verifier{pub: pub} }
+
+func (v *Verifier) Parse(token string) (*Claims, error) {
 	claims := &Claims{}
 	_, err := jwt.ParseWithClaims(token, claims,
-		func(t *jwt.Token) (any, error) { return m.secret, nil },
-		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+		func(t *jwt.Token) (any, error) { return v.pub, nil },
+		jwt.WithValidMethods([]string{jwt.SigningMethodEdDSA.Alg()}),
 		jwt.WithIssuer(issuer),
 		jwt.WithExpirationRequired(),
 	)

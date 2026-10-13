@@ -10,7 +10,6 @@ import (
 
 type Querier interface {
 	AddProductStock(ctx context.Context, arg AddProductStockParams) (Product, error)
-	BumpTokenVersion(ctx context.Context, id int64) error
 	CountCategories(ctx context.Context) (int64, error)
 	CountLowStockProducts(ctx context.Context) (int64, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
@@ -18,7 +17,6 @@ type Querier interface {
 	CountSales(ctx context.Context, cashierID *int64) (int64, error)
 	CountStockMovementsByProduct(ctx context.Context, productID int64) (int64, error)
 	CountSuppliers(ctx context.Context) (int64, error)
-	CountUsers(ctx context.Context) (int64, error)
 	CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreatePurchase(ctx context.Context, arg CreatePurchaseParams) (Purchase, error)
@@ -27,7 +25,6 @@ type Querier interface {
 	CreateSaleItem(ctx context.Context, arg CreateSaleItemParams) (SaleItem, error)
 	CreateStockMovement(ctx context.Context, arg CreateStockMovementParams) error
 	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
-	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeactivateProduct(ctx context.Context, id int64) (int64, error)
 	DeleteCategory(ctx context.Context, id int64) (int64, error)
 	DeleteSupplier(ctx context.Context, id int64) (int64, error)
@@ -40,8 +37,6 @@ type Querier interface {
 	GetPurchase(ctx context.Context, id int64) (Purchase, error)
 	GetSale(ctx context.Context, id int64) (Sale, error)
 	GetSupplier(ctx context.Context, id int64) (Supplier, error)
-	GetUserByEmail(ctx context.Context, email string) (User, error)
-	GetUserByID(ctx context.Context, id int64) (User, error)
 	ListCategories(ctx context.Context, arg ListCategoriesParams) ([]Category, error)
 	ListLowStockProducts(ctx context.Context, arg ListLowStockProductsParams) ([]Product, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
@@ -51,12 +46,10 @@ type Querier interface {
 	ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, error)
 	ListStockMovementsByProduct(ctx context.Context, arg ListStockMovementsByProductParams) ([]StockMovement, error)
 	ListSuppliers(ctx context.Context, arg ListSuppliersParams) ([]Supplier, error)
-	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ReceiveProductStock(ctx context.Context, arg ReceiveProductStockParams) (Product, error)
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
-	UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error)
 }
 
 var _ Querier = (*Queries)(nil)

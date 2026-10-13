@@ -3,12 +3,14 @@ info:
   title: martgo API
   version: 1.0.0
   description: |
-    Supermarket management API: catalog, stock, purchases, sales and staff roles.
+    Supermarket management API: catalog, stock, purchases and sales.
 
     **Money** is always an integer in the smallest currency unit (`4500` = 45.00).
 
-    **Auth:** call `POST /auth/login`, then click **Authorize** and paste the
-    `access_token`. Roles: `admin`, `manager`, `cashier`.
+    **Auth:** log in and manage users in the **martgo-auth** service
+    (its docs: http://localhost:8081/docs). Copy the `access_token` from its
+    `POST /auth/login`, then click **Authorize** here and paste it.
+    Roles: `admin`, `manager`, `cashier`.
 
     **Errors** always have the shape `{"error": "message"}`.
 servers:
@@ -17,10 +19,6 @@ security:
   - bearerAuth: []
 
 tags:
-  - name: Auth
-    description: Log in and inspect the current user.
-  - name: Users
-    description: Admin only.
   - name: Categories
     description: Read for all roles; write for admin and manager.
   - name: Suppliers
@@ -33,125 +31,6 @@ tags:
     description: Admin and manager.
 
 paths:
-  /auth/login:
-    post:
-      tags: [Auth]
-      operationId: login
-      summary: Log in and get an access token
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/LoginRequest" }
-            example: { email: admin@martgo.local, password: admin12345 }
-      responses:
-        "200":
-          description: Logged in
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/LoginResponse" }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-
-  /auth/me:
-    get:
-      tags: [Auth]
-      operationId: getCurrentUser
-      summary: Get the logged-in user
-      responses:
-        "200":
-          description: Current user
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/User" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-
-  /auth/logout:
-    post:
-      tags: [Auth]
-      operationId: logout
-      summary: Log out on all devices
-      description: Revokes every access token the current user holds.
-      responses:
-        "204":
-          description: Logged out
-        "401": { $ref: "#/components/responses/Unauthorized" }
-
-  /users:
-    get:
-      tags: [Users]
-      operationId: listUsers
-      summary: List users
-      parameters:
-        - $ref: "#/components/parameters/Limit"
-        - $ref: "#/components/parameters/Offset"
-      responses:
-        "200":
-          description: Page of users
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/UserPage" }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-    post:
-      tags: [Users]
-      operationId: createUser
-      summary: Create a user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/CreateUserRequest" }
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/User" }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "409": { $ref: "#/components/responses/Conflict" }
-
-  /users/{id}:
-    parameters:
-      - $ref: "#/components/parameters/ID"
-    get:
-      tags: [Users]
-      operationId: getUser
-      summary: Get a user
-      responses:
-        "200":
-          description: User
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/User" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-    patch:
-      tags: [Users]
-      operationId: updateUser
-      summary: Update a user (only the fields sent are changed)
-      description: Admins cannot deactivate themselves or change their own role.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: "#/components/schemas/UpdateUserRequest" }
-      responses:
-        "200":
-          description: Updated
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/User" }
-        "400": { $ref: "#/components/responses/BadRequest" }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "404": { $ref: "#/components/responses/NotFound" }
-
   /categories:
     get:
       tags: [Categories]
@@ -719,67 +598,9 @@ components:
         offset: { type: integer }
         total: { type: integer, format: int64 }
 
-    Role:
-      type: string
-      enum: [admin, manager, cashier]
-
     PaymentMethod:
       type: string
       enum: [cash, card, ewallet]
-
-    # --- Auth & users ---
-
-    LoginRequest:
-      type: object
-      required: [email, password]
-      properties:
-        email: { type: string, format: email }
-        password: { type: string, maxLength: 72 }
-
-    LoginResponse:
-      type: object
-      properties:
-        access_token: { type: string }
-        token_type: { type: string, example: Bearer }
-        expires_at: { type: string, format: date-time }
-        user: { $ref: "#/components/schemas/User" }
-
-    User:
-      type: object
-      properties:
-        id: { type: integer, format: int64 }
-        email: { type: string, format: email }
-        full_name: { type: string }
-        role: { $ref: "#/components/schemas/Role" }
-        is_active: { type: boolean }
-        created_at: { type: string, format: date-time }
-        updated_at: { type: string, format: date-time }
-
-    UserPage:
-      type: object
-      properties:
-        data:
-          type: array
-          items: { $ref: "#/components/schemas/User" }
-        pagination: { $ref: "#/components/schemas/Pagination" }
-
-    CreateUserRequest:
-      type: object
-      required: [email, password, full_name, role]
-      properties:
-        email: { type: string, format: email, maxLength: 254 }
-        password: { type: string, minLength: 8, maxLength: 72 }
-        full_name: { type: string, maxLength: 100 }
-        role: { $ref: "#/components/schemas/Role" }
-
-    UpdateUserRequest:
-      type: object
-      description: Every field is optional; only the fields sent are changed.
-      properties:
-        full_name: { type: string, minLength: 1, maxLength: 100 }
-        role: { $ref: "#/components/schemas/Role" }
-        is_active: { type: boolean }
-        password: { type: string, minLength: 8, maxLength: 72 }
 
     # --- Catalog ---
 

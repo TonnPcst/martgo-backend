@@ -1,9 +1,30 @@
 # martgo
 
 A starter supermarket management API in Go: products, categories, suppliers,
-purchases (stock in), sales (stock out), stock audit trail, users with roles.
+purchases (stock in), sales (stock out), stock audit trail.
 
-**Stack:** chi · PostgreSQL · pgx/pgxpool · sqlc · goose · JWT · bcrypt · validator · slog
+Login and users live in a separate service, **martgo-auth**
+(`../auth-supermarket-go-backend-project`). This service (mart-api) only verifies
+the tokens it issues.
+
+**Stack:** chi · PostgreSQL · pgx/pgxpool · sqlc · goose · JWT (EdDSA verify) · Redis · validator · slog
+
+## Services
+
+```
+client → gateway :8000 ─┬─ /api/v1/auth/*, /api/v1/users ─→ martgo-auth :8081 → auth Postgres :5434
+                        └─ everything else ───────────────→ mart-api   :8080 → Postgres :5433
+                 martgo-auth writes session:user:{id} ─→ Redis :6380 ←─ mart-api reads it
+```
+
+- mart-api verifies JWTs with the auth service's **public** key (`keys/jwt_public.pem`).
+- On every request it reads `session:user:{id}` from Redis to check that the
+  token is not revoked and the user is still active, and to get their current role.
+  If Redis is unreachable it returns 500 (fails closed).
+- `sales.cashier_id`, `purchases.created_by` and `stock_movements.created_by`
+  store auth-service user IDs without a foreign key.
+- The token and Redis contract is documented in martgo-auth's README. Change
+  both services together.
 
 ## Architecture
 
@@ -37,29 +58,36 @@ Requirements: Go 1.25+, Docker. (sqlc/air/goose run through `go run`, so no glob
 
 ```bash
 cp .env.example .env          # optional: the Makefile falls back to .env.example
-docker compose up -d          # Postgres on localhost:5433
+mkdir -p keys && cp ../auth-supermarket-go-backend-project/keys/jwt_public.pem keys/
+docker compose up -d          # Postgres :5433, Redis :6380, gateway :8000
 make sqlc                     # generate internal/db from the SQL queries
-make migrate                  # create tables + seed the admin user
+make migrate                  # create tables
 make run                      # API on http://localhost:8080
 ```
+
+Then set up and run martgo-auth (see its README). Call everything through the
+gateway at http://localhost:8000.
 
 Other targets: `make dev` (hot reload), `make test`, `make migrate-status`,
 `make migrate-down`, `make migrate-create name=add_x`, `make help`.
 
 ## API docs
 
-With the server running, open **http://localhost:8080/docs** for interactive
-Swagger UI. Log in with `POST /auth/login`, click **Authorize**, paste the
-`access_token`, and try any endpoint from the browser.
+Each service serves its own Swagger UI:
 
-The OpenAPI 3.1 spec lives in [api/openapi.yaml](api/openapi.yaml) (served at
+- **martgo-auth:** http://localhost:8081/docs: log in with `POST /auth/login`
+  and copy the `access_token`.
+- **mart-api:** http://localhost:8080/docs (or http://localhost:8000/docs through
+  the gateway): click **Authorize**, paste the token, and try any endpoint.
+
+This service's OpenAPI 3.1 spec lives in [api/openapi.yaml](api/openapi.yaml) (served at
 `/docs/openapi.yaml`). It is written by hand, so update it when you add or
 change an endpoint. Check it with `make lint-api`.
 
 ## Example requests
 
 ```bash
-API=http://localhost:8080/api/v1
+API=http://localhost:8000/api/v1
 
 # Log in as the seeded admin
 TOKEN=$(curl -s -X POST $API/auth/login -H 'Content-Type: application/json' \
@@ -111,5 +139,5 @@ curl -s -X POST $API/sales -H "$AUTH" -H "$JSON" \
 ## Tests
 
 ```bash
-make test   # table-driven unit tests for the sale and purchase services (testify mocks)
+make test   # sale/purchase service tests (testify mocks) and router/auth middleware tests
 ```

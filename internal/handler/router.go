@@ -16,8 +16,6 @@ import (
 )
 
 type Services struct {
-	Auth       *service.AuthService
-	Users      *service.UserService
 	Categories *service.CategoryService
 	Suppliers  *service.SupplierService
 	Products   *service.ProductService
@@ -35,16 +33,13 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
-func NewRouter(logger *slog.Logger, tokens *auth.TokenManager, users mw.UserLookup, db Pinger, svc Services, opts RouterOptions) http.Handler {
-	authH := &AuthHandler{auth: svc.Auth, users: svc.Users}
-	userH := &UserHandler{svc: svc.Users}
+func NewRouter(logger *slog.Logger, tokens *auth.Verifier, sessions mw.SessionLookup, db Pinger, svc Services, opts RouterOptions) http.Handler {
 	categoryH := &CategoryHandler{svc: svc.Categories}
 	supplierH := &SupplierHandler{svc: svc.Suppliers}
 	productH := &ProductHandler{svc: svc.Products}
 	saleH := &SaleHandler{svc: svc.Sales}
 	purchaseH := &PurchaseHandler{svc: svc.Purchases}
 
-	adminOnly := mw.RequireRole(domain.RoleAdmin)
 	managers := mw.RequireRole(domain.RoleAdmin, domain.RoleManager)
 
 	r := chi.NewRouter()
@@ -72,21 +67,10 @@ func NewRouter(logger *slog.Logger, tokens *auth.TokenManager, users mw.UserLook
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(mw.APIHeaders)
-		r.With(mw.RateLimit(5, time.Minute)).Post("/auth/login", authH.Login)
 
+		// /auth/* and /users are served by the auth service (martgo-auth) behind the gateway.
 		r.Group(func(r chi.Router) {
-			r.Use(mw.Authenticate(tokens, users))
-
-			r.Get("/auth/me", authH.Me)
-			r.Post("/auth/logout", authH.Logout)
-
-			r.Route("/users", func(r chi.Router) {
-				r.Use(adminOnly)
-				r.Get("/", userH.List)
-				r.Post("/", userH.Create)
-				r.Get("/{id}", userH.Get)
-				r.Patch("/{id}", userH.Update)
-			})
+			r.Use(mw.Authenticate(tokens, sessions))
 
 			r.Route("/categories", func(r chi.Router) {
 				r.Get("/", categoryH.List)

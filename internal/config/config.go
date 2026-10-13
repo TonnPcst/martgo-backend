@@ -15,8 +15,8 @@ type Config struct {
 	HTTPAddr           string
 	LogLevel           slog.Level
 	DatabaseURL        string
-	JWTSecret          string
-	JWTTTL             time.Duration
+	RedisURL           string
+	JWTPublicKeyFile   string
 	ShutdownTimeout    time.Duration
 	TrustProxy         bool
 	EnableDocs         bool
@@ -25,24 +25,19 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		Env:         getEnv("APP_ENV", "development"),
-		HTTPAddr:    getEnv("HTTP_ADDR", ":8080"),
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		JWTSecret:   os.Getenv("JWT_SECRET"),
+		Env:              getEnv("APP_ENV", "development"),
+		HTTPAddr:         getEnv("HTTP_ADDR", ":8080"),
+		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		RedisURL:         getEnv("REDIS_URL", "redis://localhost:6380/0"),
+		JWTPublicKeyFile: getEnv("JWT_PUBLIC_KEY_FILE", "keys/jwt_public.pem"),
 	}
 
 	var errs []error
 	if cfg.DatabaseURL == "" {
 		errs = append(errs, errors.New("DATABASE_URL is required"))
 	}
-	if len(cfg.JWTSecret) < 32 {
-		errs = append(errs, errors.New("JWT_SECRET must be at least 32 characters"))
-	}
 
 	var err error
-	if cfg.JWTTTL, err = time.ParseDuration(getEnv("JWT_TTL", "24h")); err != nil {
-		errs = append(errs, fmt.Errorf("JWT_TTL: %w", err))
-	}
 	if cfg.ShutdownTimeout, err = time.ParseDuration(getEnv("SHUTDOWN_TIMEOUT", "10s")); err != nil {
 		errs = append(errs, fmt.Errorf("SHUTDOWN_TIMEOUT: %w", err))
 	}
@@ -61,24 +56,22 @@ func Load() (Config, error) {
 		if strings.Contains(cfg.DatabaseURL, "sslmode=disable") {
 			errs = append(errs, errors.New("DATABASE_URL must not use sslmode=disable in production"))
 		}
-		if strings.HasPrefix(cfg.JWTSecret, "change-me") {
-			errs = append(errs, errors.New("JWT_SECRET is still the example value"))
-		}
 	}
 
 	return cfg, errors.Join(errs...)
 }
 
+// getEnv trims whitespace because make keeps trailing spaces from .env lines.
 func getEnv(key, fallback string) string {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
 		return v
 	}
 	return fallback
 }
 
 func getBool(key string, fallback bool) (bool, error) {
-	v, ok := os.LookupEnv(key)
-	if !ok || v == "" {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
 		return fallback, nil
 	}
 	b, err := strconv.ParseBool(v)
