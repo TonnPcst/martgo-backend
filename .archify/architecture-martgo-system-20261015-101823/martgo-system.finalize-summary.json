@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/architecture-martgo-system-20261015-101823/candidate.json",
+    "sha256": "6a6822dc2a52ae9eeed6ece11cfa427eb0c1d287f6c675045224714b5284b680",
+    "bytes": 3962
+  },
+  "artifact": {
+    "path": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/architecture-martgo-system-20261015-101823/martgo-system.html",
+    "sha256": "482818ade376afdafd2b7908e9ab1c421bb14cf1e8e9a8eda8eb48101e605d8e",
+    "bytes": 821894
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/architecture-martgo-system-20261015-101823/martgo-system.finalize.json",
+    "summaryReceipt": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/architecture-martgo-system-20261015-101823/martgo-system.finalize-summary.json",
+    "browserCheckReceipt": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/architecture-martgo-system-20261015-101823/martgo-system.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.1.0",
+    "availableVersion": "3.1.0",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-15T03:15:38.041Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 1871
+}

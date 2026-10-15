@@ -14,6 +14,13 @@ import (
 
 type PurchaseService struct{ store store.Store }
 
+// NewPurchaseService creates the purchase service.
+//
+// ENG: All data access goes through the given store.
+// LAO: ສ້າງ service ສຳລັບຈັດການການຊື້ສິນຄ້າ.
+//
+// @param s - data store
+// @returns the service
 func NewPurchaseService(s store.Store) *PurchaseService { return &PurchaseService{store: s} }
 
 type PurchaseItemInput struct {
@@ -35,6 +42,17 @@ type PurchaseDetail struct {
 	Items []db.PurchaseItem `json:"items"`
 }
 
+// Create records a purchase from a supplier and adds the items to stock.
+//
+// ENG: Validates the items, then in one transaction: checks the supplier exists,
+// locks the products (sorted by ID to avoid deadlocks), computes the total, saves
+// the purchase and its items, increases stock (updating the cost) and writes a
+// "purchase" stock movement for each item.
+// LAO: ບັນທຶກການຊື້ ໃນ transaction — ກວດຜູ້ສະໜອງ, ລັອກສິນຄ້າ, ຄິດໄລ່ຍອດ, ເພີ່ມສະຕັອກ.
+//
+// @param ctx - request context
+// @param in - supplier, creator, invoice number, note and items
+// @returns the purchase with its items, a validation error, or NotFound for a missing supplier or product
 func (s *PurchaseService) Create(ctx context.Context, in CreatePurchaseInput) (PurchaseDetail, error) {
 	if err := validatePurchaseItems(in.Items); err != nil {
 		return PurchaseDetail{}, err
@@ -117,6 +135,14 @@ func (s *PurchaseService) Create(ctx context.Context, in CreatePurchaseInput) (P
 	return out, err
 }
 
+// Get loads a purchase with its line items.
+//
+// ENG: Returns NotFound when there is no such purchase.
+// LAO: ດຶງຂໍ້ມູນການຊື້ ພ້ອມລາຍການສິນຄ້າ.
+//
+// @param ctx - request context
+// @param id - purchase ID
+// @returns the purchase detail, or a NotFound error
 func (s *PurchaseService) Get(ctx context.Context, id int64) (PurchaseDetail, error) {
 	purchase, err := s.store.GetPurchase(ctx, id)
 	if err != nil {
@@ -129,6 +155,16 @@ func (s *PurchaseService) Get(ctx context.Context, id int64) (PurchaseDetail, er
 	return PurchaseDetail{Purchase: purchase, Items: items}, nil
 }
 
+// List returns one page of purchases and the total count.
+//
+// ENG: Optionally filtered by supplier.
+// LAO: ດຶງລາຍການການຊື້ແບບແບ່ງໜ້າ — ກອງຕາມຜູ້ສະໜອງໄດ້.
+//
+// @param ctx - request context
+// @param supplierID - supplier filter, nil for all
+// @param limit - page size
+// @param offset - number of rows to skip
+// @returns the page items and the total number of matching purchases
 func (s *PurchaseService) List(ctx context.Context, supplierID *int64, limit, offset int32) ([]db.Purchase, int64, error) {
 	purchase, err := s.store.ListPurchases(ctx, db.ListPurchasesParams{
 		SupplierID: supplierID,
@@ -145,6 +181,14 @@ func (s *PurchaseService) List(ctx context.Context, supplierID *int64, limit, of
 	return purchase, total, nil
 }
 
+// validatePurchaseItems checks the purchase lines before anything is written.
+//
+// ENG: Needs at least one item. Each item must have a valid product ID, quantity
+// above 0 and a unit cost that is not negative, and a product may appear only once.
+// LAO: ກວດລາຍການສິນຄ້າໃນການຊື້ — ຕ້ອງມີຢ່າງໜ້ອຍ 1, ຈຳນວນ > 0, ສິນຄ້າຫ້າມຊ້ຳ.
+//
+// @param items - purchase lines
+// @returns nil, or a validation error
 func validatePurchaseItems(items []PurchaseItemInput) error {
 	if len(items) == 0 {
 		return apperr.Validation("a purchase must have at least one item")

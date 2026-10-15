@@ -417,6 +417,17 @@ paths:
 
         - **cash:** `paid_amount` must be at least the total; the rest is returned as change.
         - **card / ewallet:** charged exactly the total. Send `0` (or omit) to mean the total.
+
+        **Safe retries:** send an `Idempotency-Key` (e.g. a UUID generated per checkout).
+        If the same cashier sends the same request again with the same key, the sale
+        already recorded is returned with `200` and `Idempotent-Replayed: true`;
+        nothing is sold twice. Reusing a key for a different request returns `409`.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: 1-255 printable ASCII characters, no spaces. Scoped to the logged-in cashier.
+          schema: { type: string, maxLength: 255, example: 6f1c2a9e-3b7d-4e1a-9c55-0d8e4f2b7a11 }
       requestBody:
         required: true
         content:
@@ -433,11 +444,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SaleDetail" }
+        "200":
+          description: Retry of an earlier request with the same `Idempotency-Key`; the original sale
+          headers:
+            Idempotent-Replayed:
+              description: Always `true`
+              schema: { type: string, enum: ["true"] }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SaleDetail" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409":
-          description: Not enough stock
+          description: Not enough stock, or the `Idempotency-Key` was already used for a different sale
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
@@ -750,6 +770,9 @@ components:
         change_amount: { $ref: "#/components/schemas/Money" }
         note: { type: string }
         created_at: { type: string, format: date-time }
+        idempotency_key:
+          type: [string, "null"]
+          description: The `Idempotency-Key` the sale was created with, if any
 
     SaleItem:
       type: object

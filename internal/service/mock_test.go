@@ -33,6 +33,11 @@ func (q *mockQuerier) GetProductsForUpdate(ctx context.Context, ids []int64) ([]
 	return args.Get(0).([]db.Product), args.Error(1)
 }
 
+func (q *mockQuerier) GetProductForUpdate(ctx context.Context, id int64) (db.Product, error) {
+	args := q.Called(ctx, id)
+	return args.Get(0).(db.Product), args.Error(1)
+}
+
 func (q *mockQuerier) AddProductStock(ctx context.Context, arg db.AddProductStockParams) (db.Product, error) {
 	args := q.Called(ctx, arg)
 	return args.Get(0).(db.Product), args.Error(1)
@@ -55,6 +60,11 @@ func (q *mockQuerier) CreateSale(ctx context.Context, arg db.CreateSaleParams) (
 func (q *mockQuerier) CreateSaleItem(ctx context.Context, arg db.CreateSaleItemParams) (db.SaleItem, error) {
 	args := q.Called(ctx, arg)
 	return args.Get(0).(db.SaleItem), args.Error(1)
+}
+
+func (q *mockQuerier) GetSaleByIdempotencyKey(ctx context.Context, arg db.GetSaleByIdempotencyKeyParams) (db.Sale, error) {
+	args := q.Called(ctx, arg)
+	return args.Get(0).(db.Sale), args.Error(1)
 }
 
 func (q *mockQuerier) GetSale(ctx context.Context, id int64) (db.Sale, error) {

@@ -22,20 +22,23 @@ func (q *Queries) CountSales(ctx context.Context, cashierID *int64) (int64, erro
 }
 
 const createSale = `-- name: CreateSale :one
-INSERT INTO sales (cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note, created_at
+INSERT INTO sales (cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note,
+                   idempotency_key, request_hash)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note, created_at, idempotency_key, request_hash
 `
 
 type CreateSaleParams struct {
-	CashierID     int64  `json:"cashier_id"`
-	PaymentMethod string `json:"payment_method"`
-	Subtotal      int64  `json:"subtotal"`
-	Discount      int64  `json:"discount"`
-	Total         int64  `json:"total"`
-	PaidAmount    int64  `json:"paid_amount"`
-	ChangeAmount  int64  `json:"change_amount"`
-	Note          string `json:"note"`
+	CashierID      int64   `json:"cashier_id"`
+	PaymentMethod  string  `json:"payment_method"`
+	Subtotal       int64   `json:"subtotal"`
+	Discount       int64   `json:"discount"`
+	Total          int64   `json:"total"`
+	PaidAmount     int64   `json:"paid_amount"`
+	ChangeAmount   int64   `json:"change_amount"`
+	Note           string  `json:"note"`
+	IdempotencyKey *string `json:"idempotency_key"`
+	RequestHash    *string `json:"-"`
 }
 
 func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, error) {
@@ -48,6 +51,8 @@ func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, e
 		arg.PaidAmount,
 		arg.ChangeAmount,
 		arg.Note,
+		arg.IdempotencyKey,
+		arg.RequestHash,
 	)
 	var i Sale
 	err := row.Scan(
@@ -61,6 +66,8 @@ func (q *Queries) CreateSale(ctx context.Context, arg CreateSaleParams) (Sale, e
 		&i.ChangeAmount,
 		&i.Note,
 		&i.CreatedAt,
+		&i.IdempotencyKey,
+		&i.RequestHash,
 	)
 	return i, err
 }
@@ -103,7 +110,7 @@ func (q *Queries) CreateSaleItem(ctx context.Context, arg CreateSaleItemParams) 
 }
 
 const getSale = `-- name: GetSale :one
-SELECT id, cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note, created_at FROM sales WHERE id = $1
+SELECT id, cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note, created_at, idempotency_key, request_hash FROM sales WHERE id = $1
 `
 
 func (q *Queries) GetSale(ctx context.Context, id int64) (Sale, error) {
@@ -120,6 +127,37 @@ func (q *Queries) GetSale(ctx context.Context, id int64) (Sale, error) {
 		&i.ChangeAmount,
 		&i.Note,
 		&i.CreatedAt,
+		&i.IdempotencyKey,
+		&i.RequestHash,
+	)
+	return i, err
+}
+
+const getSaleByIdempotencyKey = `-- name: GetSaleByIdempotencyKey :one
+SELECT id, cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note, created_at, idempotency_key, request_hash FROM sales WHERE cashier_id = $1 AND idempotency_key = $2
+`
+
+type GetSaleByIdempotencyKeyParams struct {
+	CashierID      int64   `json:"cashier_id"`
+	IdempotencyKey *string `json:"idempotency_key"`
+}
+
+func (q *Queries) GetSaleByIdempotencyKey(ctx context.Context, arg GetSaleByIdempotencyKeyParams) (Sale, error) {
+	row := q.db.QueryRow(ctx, getSaleByIdempotencyKey, arg.CashierID, arg.IdempotencyKey)
+	var i Sale
+	err := row.Scan(
+		&i.ID,
+		&i.CashierID,
+		&i.PaymentMethod,
+		&i.Subtotal,
+		&i.Discount,
+		&i.Total,
+		&i.PaidAmount,
+		&i.ChangeAmount,
+		&i.Note,
+		&i.CreatedAt,
+		&i.IdempotencyKey,
+		&i.RequestHash,
 	)
 	return i, err
 }
@@ -157,7 +195,7 @@ func (q *Queries) ListSaleItems(ctx context.Context, saleID int64) ([]SaleItem, 
 }
 
 const listSales = `-- name: ListSales :many
-SELECT id, cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note, created_at FROM sales
+SELECT id, cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note, created_at, idempotency_key, request_hash FROM sales
 WHERE ($1::bigint IS NULL OR cashier_id = $1::bigint)
 ORDER BY created_at DESC, id DESC
 LIMIT $3::int OFFSET $2::int
@@ -189,6 +227,8 @@ func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]Sale, e
 			&i.ChangeAmount,
 			&i.Note,
 			&i.CreatedAt,
+			&i.IdempotencyKey,
+			&i.RequestHash,
 		); err != nil {
 			return nil, err
 		}

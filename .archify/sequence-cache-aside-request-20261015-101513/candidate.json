@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Cache-Aside Web Request",
+    "subtitle": "Browser → API → Redis, falling back to PostgreSQL on a cache miss",
+    "output": ".archify/sequence-cache-aside-request-20261015-101513/cache-aside-request.html",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "browser", "type": "frontend", "label": "Browser", "sublabel": "client" },
+    { "id": "api", "type": "backend", "label": "API", "sublabel": "request handler" },
+    { "id": "redis", "type": "database", "label": "Redis", "sublabel": "cache" },
+    { "id": "postgres", "type": "database", "label": "PostgreSQL", "sublabel": "source of truth" }
+  ],
+  "segments": [
+    { "from": 160, "to": 250, "label": "Cache lookup" },
+    { "from": 262, "to": 380, "label": "Miss: load + fill" },
+    { "from": 392, "to": 440, "label": "Response" }
+  ],
+  "messages": [
+    { "id": "http-request", "from": "browser", "to": "api", "y": 175, "label": "GET /resource", "variant": "emphasis" },
+    { "id": "cache-get", "from": "api", "to": "redis", "y": 205, "label": "GET cache key", "variant": "default" },
+    { "id": "cache-miss", "from": "redis", "to": "api", "y": 233, "label": "miss (nil)", "variant": "return" },
+    { "id": "db-query", "from": "api", "to": "postgres", "y": 280, "label": "SELECT row", "variant": "emphasis" },
+    { "id": "db-rows", "from": "postgres", "to": "api", "y": 308, "label": "row data", "variant": "return" },
+    { "id": "cache-set", "from": "api", "to": "redis", "y": 345, "label": "SET key + TTL", "variant": "default", "note": "fill cache so the next request hits" },
+    { "id": "http-response", "from": "api", "to": "browser", "y": 415, "label": "200 JSON", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "api", "from": 175, "to": 421, "type": "backend" },
+    { "participant": "redis", "from": 200, "to": 239, "type": "database" },
+    { "participant": "postgres", "from": 275, "to": 314, "type": "database" },
+    { "participant": "redis", "from": 340, "to": 360, "type": "database" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Cache hit",
+      "items": [
+        "If Redis returns a value, the API responds immediately",
+        "PostgreSQL is never touched on a hit"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Cache miss",
+      "items": [
+        "The API reads the row from PostgreSQL",
+        "It writes the result back to Redis with a TTL before responding"
+      ]
+    }
+  ]
+}

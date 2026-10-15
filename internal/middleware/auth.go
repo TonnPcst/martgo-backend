@@ -16,6 +16,17 @@ type SessionLookup interface {
 	Get(ctx context.Context, userID int64) (session.State, error)
 }
 
+// Authenticate requires a valid Bearer token and a live session.
+//
+// ENG: Verifies the JWT signature, then reads the user's session from Redis to check
+// that the account is active and the token version still matches (so logout and
+// role changes take effect right away). The role from Redis replaces the one in the
+// token. If Redis fails, the request is rejected rather than let through.
+// LAO: ກວດ Bearer token ແລະ session ໃນ Redis — ບັນຊີຕ້ອງ active ແລະ ເວີຊັນ token ຕ້ອງກົງກັນ.
+//
+// @param tokens - verifies the JWT signature and expiry
+// @param sessions - looks up the session state published by the auth service
+// @returns the middleware; it answers 401 for any auth failure
 func Authenticate(tokens *auth.Verifier, sessions SessionLookup) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +67,14 @@ func Authenticate(tokens *auth.Verifier, sessions SessionLookup) func(http.Handl
 	}
 }
 
+// RequireRole only lets users with one of the given roles through.
+//
+// ENG: Must run after Authenticate. Returns 401 if no claims are in the context and
+// 403 if the user's role is not in the allowed list.
+// LAO: ອະນຸຍາດສະເພາະຜູ້ໃຊ້ທີ່ມີ role ຕາມທີ່ກຳນົດ — ບໍ່ມີສິດຈະຕອບ 403.
+//
+// @param roles - roles that are allowed
+// @returns the middleware
 func RequireRole(roles ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]bool, len(roles))
 	for _, role := range roles {

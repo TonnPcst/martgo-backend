@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "70598915-4b6d-4643-bc15-5a2c38520a8c",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/architecture-martgo-system-20261015-101823/candidate.json",
+  "output": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/architecture-martgo-system-20261015-101823/martgo-system.html",
+  "specification": {
+    "sha256": "6a6822dc2a52ae9eeed6ece11cfa427eb0c1d287f6c675045224714b5284b680",
+    "bytes": 3962
+  },
+  "artifact": {
+    "sha256": "482818ade376afdafd2b7908e9ab1c421bb14cf1e8e9a8eda8eb48101e605d8e",
+    "bytes": 821894
+  }
+}

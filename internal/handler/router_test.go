@@ -47,7 +47,8 @@ func newTestRouter(t *testing.T, sessions mw.SessionLookup, pinger Pinger) (http
 	pub, priv, err := ed25519.GenerateKey(nil)
 	require.NoError(t, err)
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewRouter(logger, auth.NewVerifierFromKey(pub), sessions, pinger, Services{}, RouterOptions{}), priv
+	checks := []HealthCheck{{Name: "database", Pinger: pinger}}
+	return NewRouter(logger, auth.NewVerifierFromKey(pub), sessions, checks, Services{}, RouterOptions{}), priv
 }
 
 func send(h http.Handler, method, path, token string) *httptest.ResponseRecorder {
@@ -83,6 +84,21 @@ func TestHealthz(t *testing.T) {
 
 	h, _ = newTestRouter(t, fakeSessions{}, fakePinger{err: errors.New("db down")})
 	assert.Equal(t, http.StatusServiceUnavailable, send(h, http.MethodGet, "/healthz", "").Code)
+}
+
+func TestHealthzReportsRedisDown(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	checks := []HealthCheck{
+		{Name: "database", Pinger: fakePinger{}},
+		{Name: "redis", Pinger: PingFunc(func(context.Context) error { return errors.New("connection refused") })},
+	}
+	h := NewRouter(logger, auth.NewVerifierFromKey(priv.Public().(ed25519.PublicKey)), fakeSessions{}, checks, Services{}, RouterOptions{})
+
+	rec := send(h, http.MethodGet, "/healthz", "")
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), "redis unavailable")
 }
 
 func TestNotFoundAndMethodNotAllowed(t *testing.T) {
@@ -123,6 +139,33 @@ func TestAuthenticate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, send(h, http.MethodGet, "/api/v1/suppliers", tt.token).Code)
+		})
+	}
+}
+
+func TestAuthorizationHeaderScheme(t *testing.T) {
+	sessions := fakeSessions{1: {TokenVersion: 1, Role: domain.RoleCashier, Active: true}}
+	h, priv := newTestRouter(t, sessions, fakePinger{})
+	token := mustToken(t, priv, 1, domain.RoleCashier, 1)
+
+	tests := []struct {
+		name   string
+		header string
+		want   int
+	}{
+		{"basic scheme", "Basic " + token, http.StatusUnauthorized},
+		{"no scheme", token, http.StatusUnauthorized},
+		{"empty bearer", "Bearer ", http.StatusUnauthorized},
+		// The scheme is case-insensitive; a valid cashier then fails RequireRole.
+		{"lowercase bearer", "bearer " + token, http.StatusForbidden},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/suppliers", nil)
+			req.Header.Set("Authorization", tt.header)
+			rec := httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+			assert.Equal(t, tt.want, rec.Code)
 		})
 	}
 }

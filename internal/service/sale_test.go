@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -175,6 +178,94 @@ func TestSaleService_Create(t *testing.T) {
 			assert.Equal(t, tc.wantSale.ChangeAmount, got.ChangeAmount)
 			assert.Len(t, got.Items, len(tc.wantItems))
 			q.AssertExpectations(t)
+		})
+	}
+}
+
+func TestSaleService_CreateIdempotent(t *testing.T) {
+	milk := db.Product{ID: 1, Name: "Milk 1L", Price: 4500, StockQuantity: 10, IsActive: true}
+	input := CreateSaleInput{CashierID: 7, PaymentMethod: domain.PaymentCard, IdempotencyKey: "till-3-0001",
+		Items: []SaleItemInput{{ProductID: 1, Quantity: 2}}}
+	lines, err := mergeSaleItems(input.Items)
+	require.NoError(t, err)
+	hash := saleFingerprint(input, lines)
+	lookup := db.GetSaleByIdempotencyKeyParams{CashierID: 7, IdempotencyKey: ptr("till-3-0001")}
+	wantSale := db.CreateSaleParams{CashierID: 7, PaymentMethod: domain.PaymentCard,
+		Subtotal: 9000, Total: 9000, PaidAmount: 9000, IdempotencyKey: ptr("till-3-0001"), RequestHash: ptr(hash)}
+	stored := saleFrom(wantSale)
+	stored.IdempotencyKey, stored.RequestHash = wantSale.IdempotencyKey, wantSale.RequestHash
+	storedItems := []db.SaleItem{{ID: 1, SaleID: testSaleID, ProductID: 1, Quantity: 2}}
+
+	t.Run("first request records the key and hash", func(t *testing.T) {
+		q := newMockQuerier(t)
+		q.On("GetProductsForUpdate", mock.Anything, []int64{1}).Return([]db.Product{milk}, nil).Once()
+		q.On("GetSaleByIdempotencyKey", mock.Anything, lookup).Return(db.Sale{}, pgx.ErrNoRows).Once()
+		q.On("CreateSale", mock.Anything, wantSale).Return(stored, nil).Once()
+		expectSaleItem(q, db.CreateSaleItemParams{SaleID: testSaleID, ProductID: 1, ProductName: "Milk 1L",
+			Quantity: 2, UnitPrice: 4500, LineTotal: 9000}, 7)
+
+		got, err := NewSaleService(mockStore{q}).Create(context.Background(), input)
+
+		require.NoError(t, err)
+		assert.False(t, got.Replayed)
+		q.AssertExpectations(t)
+	})
+
+	t.Run("retry returns the recorded sale without selling again", func(t *testing.T) {
+		q := newMockQuerier(t)
+		q.On("GetProductsForUpdate", mock.Anything, []int64{1}).Return([]db.Product{milk}, nil).Once()
+		q.On("GetSaleByIdempotencyKey", mock.Anything, lookup).Return(stored, nil).Once()
+		q.On("ListSaleItems", mock.Anything, testSaleID).Return(storedItems, nil).Once()
+
+		// Same basket, sent as split lines: still the same request.
+		retry := input
+		retry.Items = []SaleItemInput{{ProductID: 1, Quantity: 1}, {ProductID: 1, Quantity: 1}}
+		got, err := NewSaleService(mockStore{q}).Create(context.Background(), retry)
+
+		require.NoError(t, err)
+		assert.True(t, got.Replayed)
+		assert.Equal(t, testSaleID, got.ID)
+		assert.Equal(t, storedItems, got.Items)
+		q.AssertNotCalled(t, "CreateSale", mock.Anything, mock.Anything)
+		q.AssertNotCalled(t, "AddProductStock", mock.Anything, mock.Anything)
+	})
+
+	t.Run("key reused for a different sale is a conflict", func(t *testing.T) {
+		q := newMockQuerier(t)
+		q.On("GetProductsForUpdate", mock.Anything, []int64{1}).Return([]db.Product{milk}, nil).Once()
+		q.On("GetSaleByIdempotencyKey", mock.Anything, lookup).Return(stored, nil).Once()
+
+		other := input
+		other.Items = []SaleItemInput{{ProductID: 1, Quantity: 5}}
+		_, err := NewSaleService(mockStore{q}).Create(context.Background(), other)
+
+		require.Error(t, err)
+		assert.Equal(t, apperr.KindConflict, apperr.KindOf(err))
+		q.AssertNotCalled(t, "CreateSale", mock.Anything, mock.Anything)
+	})
+
+	t.Run("losing a race on the unique index replays the winner", func(t *testing.T) {
+		q := newMockQuerier(t)
+		q.On("GetProductsForUpdate", mock.Anything, []int64{1}).Return([]db.Product{milk}, nil).Once()
+		q.On("GetSaleByIdempotencyKey", mock.Anything, lookup).Return(db.Sale{}, pgx.ErrNoRows).Once()
+		q.On("CreateSale", mock.Anything, wantSale).Return(db.Sale{}, &pgconn.PgError{Code: "23505"}).Once()
+		q.On("GetSaleByIdempotencyKey", mock.Anything, lookup).Return(stored, nil).Once()
+		q.On("ListSaleItems", mock.Anything, testSaleID).Return(storedItems, nil).Once()
+
+		got, err := NewSaleService(mockStore{q}).Create(context.Background(), input)
+
+		require.NoError(t, err)
+		assert.True(t, got.Replayed)
+		q.AssertExpectations(t)
+	})
+
+	for _, key := range []string{"has space", "tab\tkey", "ключ", strings.Repeat("k", maxIdempotencyKeyLen+1)} {
+		t.Run("invalid key "+fmt.Sprintf("%.12q", key), func(t *testing.T) {
+			bad := input
+			bad.IdempotencyKey = key
+			_, err := NewSaleService(mockStore{newMockQuerier(t)}).Create(context.Background(), bad)
+			require.Error(t, err)
+			assert.Equal(t, apperr.KindValidation, apperr.KindOf(err))
 		})
 	}
 }

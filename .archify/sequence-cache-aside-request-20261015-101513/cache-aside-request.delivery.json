@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "8a2ac682-3975-4f96-949a-cafe319e231f",
+  "status": "current",
+  "command": "deliver",
+  "type": "sequence",
+  "input": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/sequence-cache-aside-request-20261015-101513/candidate.json",
+  "output": "/Users/valenton/OWN-PROJECTS/backend-projects/go-backend-projects/supermarket-go-backend-project/.archify/sequence-cache-aside-request-20261015-101513/cache-aside-request.html",
+  "specification": {
+    "sha256": "80ed6be9d0eed1b29db33a0fbc87d262e1e92cd72aba8e4110bc08fcaa8bb472",
+    "bytes": 2533
+  },
+  "artifact": {
+    "sha256": "6e2084cd01ea7e6f0c2d90cc7c4ab4e5c322e78cd0fc4be0113098f3e1fc453d",
+    "bytes": 809984
+  }
+}

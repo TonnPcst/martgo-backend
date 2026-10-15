@@ -15,3 +15,6 @@ sql:
         overrides:
           - db_type: "timestamptz"
             go_type: "time.Time"
+          # Internal fingerprint for idempotent retries; never sent to clients.
+          - column: "sales.request_hash"
+            go_struct_tag: 'json:"-"'

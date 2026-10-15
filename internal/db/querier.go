@@ -36,6 +36,7 @@ type Querier interface {
 	GetProductsForUpdate(ctx context.Context, ids []int64) ([]Product, error)
 	GetPurchase(ctx context.Context, id int64) (Purchase, error)
 	GetSale(ctx context.Context, id int64) (Sale, error)
+	GetSaleByIdempotencyKey(ctx context.Context, arg GetSaleByIdempotencyKeyParams) (Sale, error)
 	GetSupplier(ctx context.Context, id int64) (Supplier, error)
 	ListCategories(ctx context.Context, arg ListCategoriesParams) ([]Category, error)
 	ListLowStockProducts(ctx context.Context, arg ListLowStockProductsParams) ([]Product, error)

@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "MartGo System: mart-api + martgo-auth",
+    "subtitle": "nginx gateway splits /api/v1 between the store API and the auth service; they share only Redis session state and an Ed25519 key pair",
+    "output": ".archify/architecture-martgo-system-20261015-101823/martgo-system.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "client", "type": "external", "label": "API Client", "sublabel": "web / POS app", "pos": [40, 340], "size": [130, 64] },
+    { "id": "gateway", "type": "cloud", "label": "nginx Gateway", "sublabel": "Docker :8000", "pos": [240, 340], "size": [140, 64] },
+    { "id": "auth", "type": "security", "label": "martgo-auth", "sublabel": "Go · chi :8081", "tag": "signs JWT (private key)", "pos": [580, 190], "size": [170, 64] },
+    { "id": "telbiz", "type": "external", "label": "Telbiz SMS", "sublabel": "OTP delivery", "pos": [580, 40], "size": [170, 64] },
+    { "id": "authdb", "type": "database", "label": "Postgres (auth)", "sublabel": "users :5434", "pos": [880, 190], "size": [160, 64] },
+    { "id": "redis", "type": "database", "label": "Redis (shared)", "sublabel": "sessions + OTP :6380", "pos": [580, 340], "size": [170, 64] },
+    { "id": "martapi", "type": "backend", "label": "mart-api", "sublabel": "Go · chi :8080", "tag": "verifies JWT (public key)", "pos": [580, 490], "size": [170, 64] },
+    { "id": "martdb", "type": "database", "label": "Postgres (mart)", "sublabel": "catalog, sales :5433", "pos": [880, 490], "size": [160, 64] }
+  ],
+  "connections": [
+    { "id": "client-gateway", "from": "client", "to": "gateway", "label": "HTTP", "variant": "emphasis" },
+    { "id": "gateway-auth", "from": "gateway", "to": "auth", "label": "/auth/*, /users", "variant": "emphasis", "fromSide": "top", "toSide": "left" },
+    { "id": "gateway-mart", "from": "gateway", "to": "martapi", "label": "all other /api/v1", "variant": "emphasis", "fromSide": "bottom", "toSide": "left" },
+    { "id": "auth-telbiz", "from": "auth", "to": "telbiz", "label": "send OTP", "variant": "dashed" },
+    { "id": "auth-db", "from": "auth", "to": "authdb", "label": "users SQL" },
+    { "id": "auth-redis", "from": "auth", "to": "redis", "label": "write session, OTP", "variant": "security" },
+    { "id": "mart-redis", "from": "martapi", "to": "redis", "label": "read session", "variant": "security" },
+    { "id": "mart-db", "from": "martapi", "to": "martdb", "label": "store SQL" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Gateway routing",
+      "items": [
+        "nginx sends /api/v1/auth/ and /api/v1/users to :8081, everything else to :8080",
+        "Both Go services run on the host; nginx, Redis and Postgres run in Docker"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Token trust",
+      "items": [
+        "martgo-auth signs EdDSA JWTs (iss martgo-auth, claims uid/role/ver)",
+        "mart-api only holds the public key, so it cannot mint tokens",
+        "Each request reads session:user:{id} from Redis and fails closed if Redis is down",
+        "A token is rejected if ver differs or the account is inactive; role comes from Redis"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Login flow",
+      "items": [
+        "Password check with in-memory lockout: 5 fails → 15 min, per instance",
+        "Users with a phone get an OTP stored in Redis and sent via Telbiz (or logged when SMS_PROVIDER=log, blocked in production)",
+        "Token issue and logout write the session to Redis; logout bumps token_version"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Data ownership",
+      "items": [
+        "Each service has its own Postgres; neither reads the other's database",
+        "mart-api: categories, suppliers, products, sales, purchases, stock movements",
+        "martgo-auth: users (password hash, phone, role, token_version)"
+      ]
+    }
+  ]
+}

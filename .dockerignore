@@ -1,0 +1,17 @@
+# Secrets and keys are supplied at runtime, never baked into the image.
+.env
+keys/
+
+.git/
+.github/
+.gitlab-ci.yml
+.archify/
+.DS_Store
+bin/
+tmp/
+.go/
+docs/
+deploy/
+*.md
+Dockerfile
+docker-compose*.yml

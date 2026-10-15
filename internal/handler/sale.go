@@ -22,6 +22,19 @@ type createSaleRequest struct {
 	Items         []saleItemRequest `json:"items" validate:"required,min=1,max=200,dive"`
 }
 
+// Create records a sale at the checkout. POST /api/v1/sales
+//
+// ENG: Body: payment_method (cash, card, ewallet), discount, paid_amount, note and
+// 1-200 items with product_id and quantity. The logged-in user is saved as the
+// cashier. Prices come from the database, not from the client.
+// An optional Idempotency-Key header makes retries safe: a repeat of the same
+// request returns the original sale with 200 and "Idempotent-Replayed: true".
+// LAO: ບັນທຶກການຂາຍ — ລາຄາເອົາຈາກ DB, ຕັດສະຕັອກ, ຄິດໄລ່ເງິນທອນ. ສົ່ງ Idempotency-Key ເພື່ອ retry ໄດ້ປອດໄພ.
+//
+// @param w - response writer
+// @param r - request with the sale JSON body and optional Idempotency-Key header
+// @returns writes 201 with the sale and its items, 200 for a replayed retry; 409 if
+// stock is not enough or the key was used for a different sale
 func (h *SaleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req createSaleRequest
 	if err := httpx.DecodeJSON(w, r, &req); err != nil {
@@ -33,20 +46,34 @@ func (h *SaleHandler) Create(w http.ResponseWriter, r *http.Request) {
 		items[i] = service.SaleItemInput{ProductID: it.ProductID, Quantity: it.Quantity}
 	}
 	sale, err := h.svc.Create(r.Context(), service.CreateSaleInput{
-		CashierID:     actorFrom(r).UserID,
-		PaymentMethod: req.PaymentMethod,
-		Discount:      req.Discount,
-		PaidAmount:    req.PaidAmount,
-		Note:          req.Note,
-		Items:         items,
+		CashierID:      actorFrom(r).UserID,
+		PaymentMethod:  req.PaymentMethod,
+		Discount:       req.Discount,
+		PaidAmount:     req.PaidAmount,
+		Note:           req.Note,
+		Items:          items,
+		IdempotencyKey: r.Header.Get("Idempotency-Key"),
 	})
 	if err != nil {
 		httpx.HandleError(w, r, err)
 		return
 	}
+	if sale.Replayed {
+		w.Header().Set("Idempotent-Replayed", "true")
+		httpx.JSON(w, http.StatusOK, sale)
+		return
+	}
 	httpx.JSON(w, http.StatusCreated, sale)
 }
 
+// Get returns one sale with its items. GET /api/v1/sales/{id}
+//
+// ENG: Cashiers can only see their own sales.
+// LAO: ດຶງຂໍ້ມູນການຂາຍ — cashier ເບິ່ງໄດ້ສະເພາະການຂາຍຂອງຕົນເອງ.
+//
+// @param w - response writer
+// @param r - request with the {id} path parameter
+// @returns writes 200 with the sale; 403 for another cashier's sale, 404 if missing
 func (h *SaleHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := httpx.IDParam(r, "id")
 	if err != nil {
@@ -61,6 +88,15 @@ func (h *SaleHandler) Get(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, sale)
 }
 
+// List returns a page of sales. GET /api/v1/sales
+//
+// ENG: Optional cashier_id filter. For cashiers the filter is always forced to
+// their own ID.
+// LAO: ດຶງລາຍການການຂາຍແບບແບ່ງໜ້າ — cashier ເຫັນສະເພາະຂອງຕົນເອງ.
+//
+// @param w - response writer
+// @param r - request with optional cashier_id and pagination query
+// @returns writes 200 with a paginated list
 func (h *SaleHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit, offset, err := httpx.ParsePagination(r)
 	if err != nil {

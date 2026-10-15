@@ -9,6 +9,11 @@ It is a **starter project**: complete enough to run and use end to end, and smal
 enough to read in an afternoon and extend. There is no frontend; any client
 (a web POS, a mobile app, a script) talks to it over JSON.
 
+Staff accounts and login live in a separate service, **martgo-auth**
+(`../auth-supermarket-go-backend-project`). A gateway sends `/api/v1/auth/*` and
+`/api/v1/users` there and everything else here; this service only verifies the
+tokens martgo-auth issues.
+
 For setup and run commands, see the [README](../README.md).
 
 ---
@@ -98,6 +103,14 @@ In one database transaction:
 7. Insert the sale and items (the product name is copied onto each item as a snapshot).
 8. Remove the stock and write a `sale` movement per line.
 
+**Safe retries.** A till that loses its connection does not know whether the sale
+went through. If it sends an `Idempotency-Key` header (a UUID per checkout) and
+retries with the same key, martgo returns the sale already recorded (`200`,
+`Idempotent-Replayed: true`) instead of selling and deducting stock twice. The key
+and a hash of the request are stored on the sale, unique per cashier; the lookup
+runs after the product rows are locked, so a retry that arrives while the original
+is still running waits for it. Reusing a key for a different basket returns `409`.
+
 ### 3. Correcting stock (adjustment)
 
 ```
@@ -120,6 +133,7 @@ it, and logs an `adjustment` movement with the note.
 - **Card / e-wallet:** charged exactly the total. Send `paid_amount: 0` (or omit it)
   to mean "the total"; any other amount that is not the total is rejected.
 - Not enough stock returns `409 Conflict` with the available quantity.
+- `Idempotency-Key` is optional: 1–255 printable ASCII characters, no spaces.
 
 **Purchases**
 
@@ -133,13 +147,9 @@ it, and logs an `adjustment` movement with the note.
 - `price` must be greater than 0; `cost` and `reorder_level` must be 0 or more.
 - A product is "low stock" when it is active and `stock_quantity <= reorder_level`.
 
-**Users**
-
-- Emails are stored in lower case and must be unique.
-- Passwords are 8–72 characters (bcrypt's limit) and are stored only as bcrypt hashes.
-- Admins cannot deactivate their own account or change their own role, so the
-  store can never lock out its last admin by accident.
-- A deactivated user cannot log in.
+**Users** are managed by martgo-auth (see its README for password, phone/OTP and
+lockout rules). A deactivated user is rejected here on their next request, even
+if their token has not expired yet.
 
 **Suppliers and categories**
 
@@ -150,14 +160,23 @@ it, and logs an `adjustment` movement with the note.
 
 ## Access control
 
-Authentication uses a JWT access token from `POST /api/v1/auth/login`, sent as
-`Authorization: Bearer <token>`. The token carries the user id and role and is
-valid for `JWT_TTL` (default 24h).
+Clients log in through martgo-auth (`POST /api/v1/auth/login`, plus an SMS code
+step for users with a phone) and send the access token as
+`Authorization: Bearer <token>`. The token is an EdDSA (Ed25519) JWT; this service
+verifies it with martgo-auth's **public** key and cannot issue tokens itself.
+
+On every request it also reads the user's session hash `session:user:{id}` from
+Redis, which martgo-auth writes on login, logout and every user update:
+
+- no entry, `active=0`, or a token version that no longer matches → `401`, so
+  logout, deactivation and role changes take effect immediately;
+- the role from Redis replaces the role in the token;
+- if Redis cannot be reached the request fails with `500` (fail closed).
 
 | Area | admin | manager | cashier |
 | --- | :---: | :---: | :---: |
-| Log in, view own profile | ✓ | ✓ | ✓ |
-| Manage users | ✓ | | |
+| Log in, view own profile (martgo-auth) | ✓ | ✓ | ✓ |
+| Manage users (martgo-auth) | ✓ | | |
 | View categories and products, barcode lookup, low stock | ✓ | ✓ | ✓ |
 | Create, edit or delete categories and products | ✓ | ✓ | |
 | Stock adjustments, stock movement history | ✓ | ✓ | |
@@ -175,23 +194,12 @@ Base path: `/api/v1`. All bodies are JSON. Unknown fields are rejected.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| GET | `/healthz` | `{"status":"ok"}` if the database is reachable, otherwise `503` |
+| GET | `/healthz` | `{"status":"ok"}` if Postgres and Redis are reachable, otherwise `503` naming the one that is down |
 
-### Auth
+### Auth and users
 
-| Method | Path | Description |
-| --- | --- | --- |
-| POST | `/auth/login` | `{email, password}` → `{access_token, token_type, expires_at, user}` |
-| GET | `/auth/me` | The logged-in user |
-
-### Users (admin)
-
-| Method | Path | Description |
-| --- | --- | --- |
-| GET | `/users` | List users (paginated) |
-| POST | `/users` | Create: `{email, password, full_name, role}` |
-| GET | `/users/{id}` | Get one user |
-| PATCH | `/users/{id}` | Partial update: any of `full_name, role, is_active, password` |
+`/auth/*` and `/users` are served by martgo-auth through the gateway; see its
+README and Swagger UI.
 
 ### Categories
 
@@ -233,7 +241,7 @@ Base path: `/api/v1`. All bodies are JSON. Unknown fields are rejected.
 
 | Method | Path | Description |
 | --- | --- | --- |
-| POST | `/sales` | Create a sale (the cashier is the logged-in user) |
+| POST | `/sales` | Create a sale (the cashier is the logged-in user); optional `Idempotency-Key` header |
 | GET | `/sales` | List, newest first; admins and managers may filter by `cashier_id` |
 | GET | `/sales/{id}` | Sale with its items |
 
@@ -265,11 +273,11 @@ Base path: `/api/v1`. All bodies are JSON. Unknown fields are rejected.
 | Status | Meaning |
 | --- | --- |
 | 400 | Invalid input (validation, malformed JSON, unknown field) |
-| 401 | Missing, invalid or expired token; wrong login |
+| 401 | Missing, invalid, expired or revoked token; disabled account |
 | 403 | Logged in, but the role is not allowed |
 | 404 | Resource or route not found |
-| 409 | Conflict: duplicate SKU or email, not enough stock, record still in use |
-| 500 | Unexpected error (details are logged, never returned) |
+| 409 | Conflict: duplicate SKU, not enough stock, record still in use, idempotency key reused for a different sale |
+| 500 | Unexpected error, including Redis being unreachable (details are logged, never returned) |
 
 ---
 
@@ -291,13 +299,16 @@ erDiagram
 
 | Table | Purpose |
 | --- | --- |
-| `users` | Staff accounts: email, bcrypt hash, role, active flag |
 | `categories` | Product groups such as Dairy or Bakery |
 | `suppliers` | Who the store buys from |
 | `products` | Catalog plus current `stock_quantity`, `price`, latest `cost` |
 | `sales` / `sale_items` | Receipts; items keep a snapshot of the name and unit price |
 | `purchases` / `purchase_items` | Goods received; items keep the unit cost paid |
 | `stock_movements` | Append-only log of every stock change |
+
+`users` lives in martgo-auth's database, drawn above only to show who did what.
+`sales.cashier_id`, `purchases.created_by` and `stock_movements.created_by` store
+its user ids without a foreign key.
 
 The database backs up the application rules with `CHECK` constraints: stock never
 below 0, `total = subtotal − discount`, `change = paid − total`, and positive quantities.
@@ -308,7 +319,8 @@ below 0, `total = subtotal − discount`, `change = paid − total`, and positiv
 
 ```
 HTTP request
-  → middleware   request id, logging, panic recovery, JWT auth, role check
+  → middleware   request id, logging, panic recovery, security headers, CORS,
+                 JWT verify + Redis session check, role check
   → handler      decode and validate JSON, read URL and query params
   → service      business rules, transactions
   → store / db   sqlc-generated SQL queries via pgx
@@ -325,16 +337,17 @@ never know about HTTP, and handlers never contain SQL.
 | --- | --- |
 | `cmd/api` | Server entry point: config, wiring, graceful shutdown |
 | `cmd/migration` | Runs the goose migrations embedded in the binary |
-| `migrations/` | SQL schema migrations plus the Go admin-seed migration |
+| `migrations/` | SQL schema migrations (00006 is a no-op kept for goose history) |
 | `internal/config` | Reads environment variables |
 | `internal/domain` | Shared constants: roles, payment methods, stock reasons |
 | `internal/apperr` | Application error kinds |
-| `internal/auth` | bcrypt hashing, JWT creation and parsing |
+| `internal/auth` | EdDSA JWT verification, claims in the request context |
+| `internal/session` | Reads the session state martgo-auth publishes in Redis |
 | `internal/db` | sqlc output (generated, do not edit) and `queries/*.sql` |
 | `internal/store` | Wraps sqlc with transactions and Postgres error helpers |
 | `internal/service` | Business logic and unit tests |
 | `internal/httpx` | JSON, error, validation and pagination helpers |
-| `internal/middleware` | Auth, roles, request logging, panic recovery |
+| `internal/middleware` | Auth, roles, request logging, panic recovery, security headers, CORS |
 | `internal/handler` | HTTP handlers and the route table |
 
 ### Tech stack
@@ -346,11 +359,14 @@ never know about HTTP, and handlers never contain SQL.
 | Database | PostgreSQL 17, pgx / pgxpool |
 | Queries | sqlc (type-safe Go generated from SQL) |
 | Migrations | goose |
-| Auth | JWT (HS256) + bcrypt |
+| Auth | JWT (EdDSA, verify only) + Redis session check |
+| Gateway | nginx (Docker Compose) |
 | Validation | go-playground/validator |
 | Logging | log/slog, JSON output |
 | Dev tooling | Docker Compose, Air (hot reload), Makefile |
-| Tests | testify (table-driven unit tests for the sale and purchase services) |
+| Container | Multi-stage Dockerfile, distroless static image, non-root (`make up-app` runs the full stack) |
+| Tests | testify (table-driven unit tests), integration tests against Postgres (`-tags=integration`) |
+| CI | GitHub Actions and GitLab CI: gofmt, vet, unit tests, govulncheck, Docker build (GitHub only), integration tests on a Postgres service, `sqlc diff`, OpenAPI lint |
 
 ---
 
@@ -361,14 +377,19 @@ loads `.env` if it exists, otherwise `.env.example`.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `APP_ENV` | `development` | `production` turns docs off by default and refuses `sslmode=disable` |
 | `HTTP_ADDR` | `:8080` | Listen address |
 | `DATABASE_URL` | required | Postgres connection string |
-| `JWT_SECRET` | required, 32+ chars | Token signing key |
-| `JWT_TTL` | `24h` | Token lifetime |
+| `REDIS_URL` | `redis://localhost:6380/0` | Redis shared with martgo-auth (session state) |
+| `JWT_PUBLIC_KEY_FILE` | `keys/jwt_public.pem` | martgo-auth's Ed25519 public key |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `SHUTDOWN_TIMEOUT` | `10s` | Time allowed for in-flight requests on shutdown |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | from `.env` | Used once by the seed migration |
-| `POSTGRES_*` | `martgo`, port `5433` | Docker Compose database settings |
+| `TRUST_PROXY` | `false` | Take the client IP from `X-Forwarded-For` / `X-Real-IP` (set when behind the gateway) |
+| `ENABLE_DOCS` | `true` outside production | Serve Swagger UI at `/docs` |
+| `CORS_ALLOWED_ORIGINS` | empty (CORS off) | Comma-separated browser origins |
+| `POSTGRES_*`, `REDIS_PORT`, `GATEWAY_PORT` | `martgo`, `5433`, `6380`, `8000` | Docker Compose settings |
+
+Token lifetime (`JWT_TTL`) and the admin seed are configured in martgo-auth.
 
 ---
 
@@ -378,7 +399,6 @@ These are deliberate gaps for a starter project and good next features:
 
 - **No refunds or voids.** A completed sale cannot be reversed.
 - **No reports.** No daily totals, sales by cashier or payment method, or best sellers.
-- **Tokens cannot be revoked.** A deactivated user's existing token works until it expires.
 - **Single store, single currency.** No branches, taxes or multi-currency.
-- **No login rate limiting or CORS.** Add these before exposing the API publicly.
-- **Tests cover only the sale and purchase services.** Handlers and SQL have no automated tests yet.
+- **No rate limiting on this API.** Only login is rate limited, in martgo-auth.
+- **Tests cover the sale, purchase and product services, token verification and routing.** Category and supplier services have no tests yet. Integration tests against a real database (`make test-integration`) cover concurrent sales, idempotent retries, stock movements and rollback.

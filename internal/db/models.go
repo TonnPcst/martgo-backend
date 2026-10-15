@@ -53,16 +53,18 @@ type PurchaseItem struct {
 }
 
 type Sale struct {
-	ID            int64     `json:"id"`
-	CashierID     int64     `json:"cashier_id"`
-	PaymentMethod string    `json:"payment_method"`
-	Subtotal      int64     `json:"subtotal"`
-	Discount      int64     `json:"discount"`
-	Total         int64     `json:"total"`
-	PaidAmount    int64     `json:"paid_amount"`
-	ChangeAmount  int64     `json:"change_amount"`
-	Note          string    `json:"note"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID             int64     `json:"id"`
+	CashierID      int64     `json:"cashier_id"`
+	PaymentMethod  string    `json:"payment_method"`
+	Subtotal       int64     `json:"subtotal"`
+	Discount       int64     `json:"discount"`
+	Total          int64     `json:"total"`
+	PaidAmount     int64     `json:"paid_amount"`
+	ChangeAmount   int64     `json:"change_amount"`
+	Note           string    `json:"note"`
+	CreatedAt      time.Time `json:"created_at"`
+	IdempotencyKey *string   `json:"idempotency_key"`
+	RequestHash    *string   `json:"-"`
 }
 
 type SaleItem struct {
@@ -95,16 +97,4 @@ type Supplier struct {
 	Address     string    `json:"address"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-type User struct {
-	ID           int64     `json:"id"`
-	Email        string    `json:"email"`
-	PasswordHash string    `json:"password_hash"`
-	FullName     string    `json:"full_name"`
-	Role         string    `json:"role"`
-	IsActive     bool      `json:"is_active"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-	TokenVersion int32     `json:"token_version"`
 }

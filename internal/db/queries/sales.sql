@@ -1,7 +1,11 @@
 -- name: CreateSale :one
-INSERT INTO sales (cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO sales (cashier_id, payment_method, subtotal, discount, total, paid_amount, change_amount, note,
+                   idempotency_key, request_hash)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING *;
+
+-- name: GetSaleByIdempotencyKey :one
+SELECT * FROM sales WHERE cashier_id = $1 AND idempotency_key = $2;
 
 -- name: CreateSaleItem :one
 INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_price, line_total)

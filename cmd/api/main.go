@@ -20,6 +20,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// main is the entry point of the mart API server.
+//
+// ENG: Calls run and exits with code 1 if it returns an error.
+// LAO: ຈຸດເລີ່ມຕົ້ນຂອງ API server — ຖ້າ run ຜິດພາດຈະອອກດ້ວຍ code 1.
 func main() {
 	if err := run(); err != nil {
 		slog.Error("server exited with error", "err", err)
@@ -27,6 +31,15 @@ func main() {
 	}
 }
 
+// run wires up all dependencies and serves HTTP until a shutdown signal arrives.
+//
+// ENG: Loads config, sets up the JSON logger, connects to Postgres and Redis (5-second
+// ping timeout), loads the auth service's Ed25519 public key, builds the services and
+// router, then starts the server. On SIGINT/SIGTERM it shuts down gracefully within
+// SHUTDOWN_TIMEOUT.
+// LAO: ເຊື່ອມຕໍ່ DB, Redis, ໂຫຼດ public key, ສ້າງ router ແລ້ວເປີດ server — ປິດແບບ graceful ເມື່ອໄດ້ຮັບສັນຍານ.
+//
+// @returns error if startup fails, the server crashes or shutdown times out
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -79,7 +92,11 @@ func run() error {
 		Purchases:  service.NewPurchaseService(st),
 	}
 
-	router := handler.NewRouter(logger, tokens, session.NewReader(rdb), pool, services, handler.RouterOptions{
+	checks := []handler.HealthCheck{
+		{Name: "database", Pinger: pool},
+		{Name: "redis", Pinger: handler.PingFunc(func(ctx context.Context) error { return rdb.Ping(ctx).Err() })},
+	}
+	router := handler.NewRouter(logger, tokens, session.NewReader(rdb), checks, services, handler.RouterOptions{
 		TrustProxy:         cfg.TrustProxy,
 		EnableDocs:         cfg.EnableDocs,
 		CORSAllowedOrigins: cfg.CORSAllowedOrigins,

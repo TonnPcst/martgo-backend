@@ -54,7 +54,7 @@ HTTP request → handler (parse/validate, JSON out)
 
 ## Setup
 
-Requirements: Go 1.25+, Docker. (sqlc/air/goose run through `go run`, so no global installs are needed.)
+Requirements: Go 1.27+, Docker. (sqlc/air/goose run through `go run`, so no global installs are needed.)
 
 ```bash
 cp .env.example .env          # optional: the Makefile falls back to .env.example
@@ -69,7 +69,33 @@ Then set up and run martgo-auth (see its README). Call everything through the
 gateway at http://localhost:8000.
 
 Other targets: `make dev` (hot reload), `make test`, `make migrate-status`,
-`make migrate-down`, `make migrate-create name=add_x`, `make help`.
+`make migrate-down`, `make migrate-create name=add_x`, `make docker-build`, `make help`.
+
+Before pushing, the same checks CI runs: `make test`, `make test-integration`
+(needs the `martgo_test` database, see `internal/service/integration_test.go`),
+`make sqlc-check` (generated code matches the SQL) and `make lint-api`.
+
+### Running everything in containers
+
+Instead of `make run` in both repos, you can run both APIs as containers:
+
+```bash
+(cd ../auth-supermarket-go-backend-project && docker compose up -d)   # auth Postgres
+make up-app     # builds both images, runs both migrations, starts both APIs; gateway on :8000
+make down-app   # removes the API containers and points the gateway back at the host
+```
+
+`docker-compose.app.yml` adds `mart-api` (:8080), `auth-api` (:8081) and one-shot
+migration containers on top of `docker-compose.yml`, and swaps the gateway to
+`deploy/nginx.app.conf`. Containers read `.env.example` and then `.env` from each
+repo; database and Redis URLs are rewritten to the compose network. The auth
+database is reached through `host.docker.internal:5434` (override with
+`AUTH_DATABASE_URL`). Stop any `make run` first, since the ports are the same.
+
+The image is distroless and runs as non-root. It contains `/app/api` and
+`/app/migrate`; keys and config are mounted or passed in at runtime, never baked in.
+
+`GET /healthz` returns `503` when Postgres **or** Redis is unreachable.
 
 ## API docs
 

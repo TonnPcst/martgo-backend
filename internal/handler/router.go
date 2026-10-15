@@ -33,7 +33,34 @@ type Pinger interface {
 	Ping(ctx context.Context) error
 }
 
-func NewRouter(logger *slog.Logger, tokens *auth.Verifier, sessions mw.SessionLookup, db Pinger, svc Services, opts RouterOptions) http.Handler {
+// PingFunc adapts a plain function (e.g. a Redis ping) to Pinger.
+type PingFunc func(ctx context.Context) error
+
+func (f PingFunc) Ping(ctx context.Context) error { return f(ctx) }
+
+// HealthCheck is one dependency /healthz must reach, such as "database" or "redis".
+type HealthCheck struct {
+	Name   string
+	Pinger Pinger
+}
+
+// NewRouter builds the HTTP router with all middleware and routes.
+//
+// ENG: Global middleware: request ID, real IP (when behind a trusted proxy), logging,
+// panic recovery, security headers and optional CORS. Every /api/v1 route needs a
+// valid token. Anyone logged in can read categories and products and create sales;
+// suppliers, purchases and product/category writes need admin or manager.
+// /auth/* and /users are served by the auth service behind the gateway.
+// LAO: ສ້າງ router ພ້ອມ middleware ແລະ ເສັ້ນທາງທັງໝົດ — ທຸກ /api/v1 ຕ້ອງມີ token, ບາງເສັ້ນທາງສະເພາະ admin/manager.
+//
+// @param logger - logger for request logs and panics
+// @param tokens - verifies the JWT access tokens
+// @param sessions - looks up session state in Redis for revocation
+// @param checks - dependencies pinged by /healthz
+// @param svc - business services used by the handlers
+// @param opts - proxy, docs and CORS settings
+// @returns the root HTTP handler
+func NewRouter(logger *slog.Logger, tokens *auth.Verifier, sessions mw.SessionLookup, checks []HealthCheck, svc Services, opts RouterOptions) http.Handler {
 	categoryH := &CategoryHandler{svc: svc.Categories}
 	supplierH := &SupplierHandler{svc: svc.Suppliers}
 	productH := &ProductHandler{svc: svc.Products}
@@ -59,7 +86,7 @@ func NewRouter(logger *slog.Logger, tokens *auth.Verifier, sessions mw.SessionLo
 		httpx.Error(w, http.StatusMethodNotAllowed, "method not allowed")
 	})
 
-	r.Get("/healthz", health(db))
+	r.Get("/healthz", health(checks))
 	if opts.EnableDocs {
 		r.Get("/docs", swaggerUI)
 		r.Get("/docs/openapi.yaml", openAPISpec)
@@ -122,18 +149,37 @@ func NewRouter(logger *slog.Logger, tokens *auth.Verifier, sessions mw.SessionLo
 	return r
 }
 
-func health(db Pinger) http.HandlerFunc {
+// health builds the health check handler. GET /healthz
+//
+// ENG: Pings every dependency (Postgres, Redis) within one 2-second timeout. Returns
+// 200 {"status":"ok"} when all answer, or 503 naming the first one that does not, so
+// load balancers take the instance out while it cannot serve requests.
+// LAO: ສ້າງ handler ກວດສຸຂະພາບລະບົບ — ping DB ແລະ Redis ພາຍໃນ 2 ວິນາທີ, ຕອບ 200 ຫຼື 503.
+//
+// @param checks - dependencies to ping, in order
+// @returns the HTTP handler
+func health(checks []HealthCheck) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		if err := db.Ping(ctx); err != nil {
-			httpx.Error(w, http.StatusServiceUnavailable, "database unavailable")
-			return
+		for _, c := range checks {
+			if err := c.Pinger.Ping(ctx); err != nil {
+				httpx.Error(w, http.StatusServiceUnavailable, c.Name+" unavailable")
+				return
+			}
 		}
 		httpx.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	}
 }
 
+// actorFrom returns the logged-in user from the request context.
+//
+// ENG: Reads the token claims that the Authenticate middleware stored. Returns an
+// empty Actor when the request is not authenticated.
+// LAO: ດຶງຂໍ້ມູນຜູ້ໃຊ້ທີ່ເຂົ້າສູ່ລະບົບ (ID, role) ຈາກ context ຂອງ request.
+//
+// @param r - incoming request
+// @returns the actor (user ID and role)
 func actorFrom(r *http.Request) service.Actor {
 	claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
