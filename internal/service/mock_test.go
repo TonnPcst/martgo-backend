@@ -77,6 +77,31 @@ func (q *mockQuerier) ListSaleItems(ctx context.Context, saleID int64) ([]db.Sal
 	return args.Get(0).([]db.SaleItem), args.Error(1)
 }
 
+func (q *mockQuerier) GetSaleForUpdate(ctx context.Context, id int64) (db.Sale, error) {
+	args := q.Called(ctx, id)
+	return args.Get(0).(db.Sale), args.Error(1)
+}
+
+func (q *mockQuerier) ListRefundedQuantities(ctx context.Context, saleID int64) ([]db.ListRefundedQuantitiesRow, error) {
+	args := q.Called(ctx, saleID)
+	return args.Get(0).([]db.ListRefundedQuantitiesRow), args.Error(1)
+}
+
+func (q *mockQuerier) SumRefundedAmount(ctx context.Context, saleID int64) (int64, error) {
+	args := q.Called(ctx, saleID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (q *mockQuerier) CreateRefund(ctx context.Context, arg db.CreateRefundParams) (db.Refund, error) {
+	args := q.Called(ctx, arg)
+	return args.Get(0).(db.Refund), args.Error(1)
+}
+
+func (q *mockQuerier) CreateRefundItem(ctx context.Context, arg db.CreateRefundItemParams) (db.RefundItem, error) {
+	args := q.Called(ctx, arg)
+	return args.Get(0).(db.RefundItem), args.Error(1)
+}
+
 func (q *mockQuerier) GetSupplier(ctx context.Context, id int64) (db.Supplier, error) {
 	args := q.Called(ctx, id)
 	return args.Get(0).(db.Supplier), args.Error(1)

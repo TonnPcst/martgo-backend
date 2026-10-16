@@ -236,3 +236,64 @@ func TestIntegration_AdjustStockNeverGoesNegative(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), got.StockQuantity)
 }
+
+func TestIntegration_RefundsRestockAndAddUpToTotal(t *testing.T) {
+	st := newTestStore(t)
+	milk := seedProduct(t, st, "MILK-1L", 10)
+	// 3 × 4500 = 13500, minus 1000 discount = 12500.
+	sale, err := NewSaleService(st).Create(t.Context(), CreateSaleInput{
+		CashierID: 7, PaymentMethod: domain.PaymentCash, Discount: 1000, PaidAmount: 20000,
+		Items: []SaleItemInput{{ProductID: milk.ID, Quantity: 3}},
+	})
+	require.NoError(t, err)
+	svc := NewRefundService(st)
+
+	r1, err := svc.Create(t.Context(), CreateRefundInput{SaleID: sale.ID, RefundedBy: 2, Reason: "changed mind",
+		Items: []RefundItemInput{{ProductID: milk.ID, Quantity: 1, Restock: true}}})
+	require.NoError(t, err)
+	assert.Equal(t, int64(4166), r1.Amount, "4500 × 12500/13500, rounded down")
+
+	r2, err := svc.Create(t.Context(), CreateRefundInput{SaleID: sale.ID, RefundedBy: 2, Reason: "bottles broken",
+		Items: []RefundItemInput{{ProductID: milk.ID, Quantity: 2, Restock: false}}})
+	require.NoError(t, err)
+	assert.Equal(t, sale.Total, r1.Amount+r2.Amount, "refunds add up to exactly the sale total")
+
+	got, err := st.GetProduct(t.Context(), milk.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(8), got.StockQuantity, "10 − 3 sold + 1 restocked; written-off bottles stay out")
+
+	_, err = svc.Create(t.Context(), CreateRefundInput{SaleID: sale.ID, RefundedBy: 2, Reason: "again"})
+	assert.Equal(t, apperr.KindConflict, apperr.KindOf(err))
+
+	refunds, err := svc.ListBySale(t.Context(), Actor{UserID: 7, Role: domain.RoleCashier}, sale.ID)
+	require.NoError(t, err)
+	require.Len(t, refunds, 2)
+	assert.Len(t, refunds[1].Items, 1)
+}
+
+func TestIntegration_ConcurrentVoidsRefundOnce(t *testing.T) {
+	st := newTestStore(t)
+	milk := seedProduct(t, st, "MILK-1L", 10)
+	sale, err := NewSaleService(st).Create(t.Context(), cardSale(7, SaleItemInput{ProductID: milk.ID, Quantity: 2}))
+	require.NoError(t, err)
+	svc := NewRefundService(st)
+
+	errs := runConcurrently(5, func(int) error {
+		_, err := svc.Create(t.Context(), CreateRefundInput{SaleID: sale.ID, RefundedBy: 2, Reason: "void"})
+		return err
+	})
+
+	succeeded := 0
+	for _, err := range errs {
+		if err == nil {
+			succeeded++
+			continue
+		}
+		assert.Equal(t, apperr.KindConflict, apperr.KindOf(err), "unexpected error: %v", err)
+	}
+	assert.Equal(t, 1, succeeded, "the sale lock lets only one void through")
+
+	got, err := st.GetProduct(t.Context(), milk.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(10), got.StockQuantity)
+}

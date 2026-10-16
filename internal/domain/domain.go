@@ -46,4 +46,5 @@ const (
 	StockReasonSale       = "sale"
 	StockReasonPurchase   = "purchase"
 	StockReasonAdjustment = "adjustment"
+	StockReasonRefund     = "refund"
 )

@@ -52,6 +52,26 @@ type PurchaseItem struct {
 	LineTotal  int64 `json:"line_total"`
 }
 
+type Refund struct {
+	ID         int64     `json:"id"`
+	SaleID     int64     `json:"sale_id"`
+	RefundedBy int64     `json:"refunded_by"`
+	Amount     int64     `json:"amount"`
+	Reason     string    `json:"reason"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type RefundItem struct {
+	ID         int64 `json:"id"`
+	RefundID   int64 `json:"refund_id"`
+	SaleItemID int64 `json:"sale_item_id"`
+	ProductID  int64 `json:"product_id"`
+	Quantity   int32 `json:"quantity"`
+	UnitPrice  int64 `json:"unit_price"`
+	LineTotal  int64 `json:"line_total"`
+	Restock    bool  `json:"restock"`
+}
+
 type Sale struct {
 	ID             int64     `json:"id"`
 	CashierID      int64     `json:"cashier_id"`

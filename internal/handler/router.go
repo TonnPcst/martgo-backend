@@ -20,6 +20,7 @@ type Services struct {
 	Suppliers  *service.SupplierService
 	Products   *service.ProductService
 	Sales      *service.SalesService
+	Refunds    *service.RefundService
 	Purchases  *service.PurchaseService
 }
 
@@ -66,6 +67,7 @@ func NewRouter(logger *slog.Logger, tokens *auth.Verifier, sessions mw.SessionLo
 	productH := &ProductHandler{svc: svc.Products}
 	saleH := &SaleHandler{svc: svc.Sales}
 	purchaseH := &PurchaseHandler{svc: svc.Purchases}
+	refundH := &RefundHandler{svc: svc.Refunds}
 
 	managers := mw.RequireRole(domain.RoleAdmin, domain.RoleManager)
 
@@ -135,6 +137,8 @@ func NewRouter(logger *slog.Logger, tokens *auth.Verifier, sessions mw.SessionLo
 				r.Post("/", saleH.Create)
 				r.Get("/", saleH.List)
 				r.Get("/{id}", saleH.Get)
+				r.Get("/{id}/refunds", refundH.List)
+				r.With(managers).Post("/{id}/refunds", refundH.Create)
 			})
 
 			r.Route("/purchases", func(r chi.Router) {

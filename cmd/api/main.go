@@ -57,7 +57,6 @@ func run() error {
 		return fmt.Errorf("create db pool: %w", err)
 	}
 	defer pool.Close()
-
 	pingCtx, cancelPing := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelPing()
 	if err := pool.Ping(pingCtx); err != nil {
@@ -89,6 +88,7 @@ func run() error {
 		Suppliers:  service.NewSupplierService(st),
 		Products:   service.NewProductService(st),
 		Sales:      service.NewSaleService(st),
+		Refunds:    service.NewRefundService(st),
 		Purchases:  service.NewPurchaseService(st),
 	}
 
